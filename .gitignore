@@ -1,0 +1,24 @@
+# Ignore object files and executables
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.so
+*.dylib
+
+# Ignore temporary files and folders
+*.tmp
+*.temp
+*.swp
+*.log
+*.dSYM/
+*.DS_Store
+
+# Ignore compilation database
+compile_commands.json
+
+# Ignore Clang-specific build artifacts
+.clangd/
+.clang-format
+.clang-tidy
