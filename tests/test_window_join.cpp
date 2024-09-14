@@ -7,6 +7,7 @@
 #include <set>
 #include <sstream>
 
+#include "JoinPlan.h"
 #include "ResultEvaluator.h"
 #include "SlidingWindowJoin.h"
 #include "Stream.h"
@@ -133,4 +134,112 @@ TEST(SlidingWindowJoinTest, ThreeWayJoinTest_BAC) {
 
   ASSERT_TRUE(resultsEqual)
       << "Result tuples are not equal between ABC and BAC join orders.";
+}
+
+TEST(JoinPlanTest, JoinPlan_ABC) {
+  // Create streams A, B, C
+  auto A = std::make_shared<Stream>("A");
+  A->addTuple({1}, 2);
+  A->addTuple({2}, 8);
+
+  auto B = std::make_shared<Stream>("B");
+  B->addTuple({3}, 4);
+  B->addTuple({4}, 10);
+
+  auto C = std::make_shared<Stream>("C");
+  C->addTuple({5}, 6);
+  C->addTuple({6}, 12);
+
+  // Window settings
+  long length = 10;
+  long slide = 5;
+
+  // First join: A ⋈ B
+  auto joinAB = std::make_shared<SlidingWindowJoin>(A, B, length, slide, "A");
+
+  // Second join: (A ⋈ B) ⋈ C
+  auto joinABC =
+      std::make_shared<SlidingWindowJoin>(joinAB, C, length, slide, "A");
+
+  // Create a JoinPlan with the final join as the root
+  JoinPlan planABC(joinABC);
+
+  // Compute the final result
+  auto resultStream = planABC.compute();
+
+  // Get the tuples from the result stream
+  const auto& result = resultStream->getTuples();
+
+  // Evaluate results (manual sum check)
+  long manualSum = 0;
+  for (const auto& tuple : result) {
+    for (const auto& value : tuple.getValues()) {
+      manualSum += value;
+    }
+  }
+
+  // Expected total sum calculation
+  long expectedSum = 0;
+  for (const auto& tuple : result) {
+    for (const auto& value : tuple.getValues()) {
+      expectedSum += value;
+    }
+  }
+
+  // Compare total sums
+  ASSERT_EQ(manualSum, expectedSum);
+}
+
+TEST(JoinPlanTest, JoinPlan_BAC) {
+  // Create streams A, B, C
+  auto A = std::make_shared<Stream>("A");
+  A->addTuple({1}, 2);
+  A->addTuple({2}, 8);
+
+  auto B = std::make_shared<Stream>("B");
+  B->addTuple({3}, 4);
+  B->addTuple({4}, 10);
+
+  auto C = std::make_shared<Stream>("C");
+  C->addTuple({5}, 6);
+  C->addTuple({6}, 12);
+
+  // Window settings
+  long length = 10;
+  long slide = 5;
+
+  // First join: B ⋈ A
+  auto joinBA = std::make_shared<SlidingWindowJoin>(B, A, length, slide, "A");
+
+  // Second join: (B ⋈ A) ⋈ C
+  auto joinBAC =
+      std::make_shared<SlidingWindowJoin>(joinBA, C, length, slide, "A");
+
+  // Create a JoinPlan with the final join as the root
+  JoinPlan planBAC(joinBAC);
+
+  // Compute the final result
+  auto resultStream = planBAC.compute();
+
+  // Get the tuples from the result stream
+  const auto& result = resultStream->getTuples();
+
+  // Evaluate results (manual sum check)
+  long manualSum = 0;
+  for (const auto& tuple : result) {
+    for (const auto& value : tuple.getValues()) {
+      manualSum += value;
+    }
+  }
+
+  // Expected total sum calculation
+  long expectedSum = 0;
+  for (const auto& tuple : result) {
+    for (const auto& value : tuple.getValues()) {
+      expectedSum += value;
+    }
+  }
+
+  // Compare total sums
+  ASSERT_EQ(manualSum, expectedSum);
 }

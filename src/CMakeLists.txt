@@ -6,6 +6,7 @@ set(SOURCES
     WindowJoinOperator.cpp
     SlidingWindowJoin.cpp
     ResultEvaluator.cpp
+    JoinPlan.cpp
     # Add other source files here
 )
 

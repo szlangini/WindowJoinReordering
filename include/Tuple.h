@@ -30,6 +30,7 @@ struct Tuple {
   long timestamp;
 
   const long getTimestamp() const { return timestamp; }
+  const std::vector<long> getValues() const { return values; }
 };
 
 #endif  // TUPLE_H
