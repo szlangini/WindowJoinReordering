@@ -10,20 +10,22 @@
 
 class SlidingWindowJoin : public WindowJoinOperator {
  public:
-  SlidingWindowJoin(std::shared_ptr<Stream> leftChild,
-                    std::shared_ptr<Stream> rightChild, long length, long slide,
+  SlidingWindowJoin(std::shared_ptr<Node> leftChild,
+                    std::shared_ptr<Node> rightChild, long length, long slide,
                     const std::string& timestampPropagator);
 
   ~SlidingWindowJoin();
 
-  void createWindows() override;
+  void createWindows(const std::shared_ptr<Stream>& leftStream,
+                     const std::shared_ptr<Stream>& rightStream) override;
+
+  std::shared_ptr<Stream> getOutputStream() override;
+
   std::shared_ptr<Stream> compute() override;
 
   void eliminateDuplicates(std::vector<Tuple>& results);
 
  private:
-  std::shared_ptr<Stream> leftChild;
-  std::shared_ptr<Stream> rightChild;
   long length;
   long slide;
 

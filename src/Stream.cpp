@@ -47,3 +47,8 @@ void Stream::setBaseStreams(
     const std::unordered_set<std::string>& baseStreams) {
   this->baseStreams = baseStreams;
 }
+
+std::shared_ptr<Stream> Stream::getOutputStream() {
+  // Stream simply returns itself as the output
+  return std::make_shared<Stream>(*this);
+}

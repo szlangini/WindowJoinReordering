@@ -7,9 +7,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "Node.h"
 #include "Tuple.h"
 
-class Stream {
+class Stream : public Node {
  public:
   Stream(const std::string& name, bool isBaseStream = true);
 
@@ -30,6 +31,8 @@ class Stream {
   const std::unordered_set<std::string>& getBaseStreams() const;
 
   void setBaseStreams(const std::unordered_set<std::string>& baseStreams);
+
+  std::shared_ptr<Stream> getOutputStream() override;
 
  private:
   std::string name;

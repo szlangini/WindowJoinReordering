@@ -23,53 +23,47 @@ std::string baseStreamsToString(
 }
 }  // namespace
 
-SlidingWindowJoin::SlidingWindowJoin(std::shared_ptr<Stream> leftChild,
-                                     std::shared_ptr<Stream> rightChild,
+SlidingWindowJoin::SlidingWindowJoin(std::shared_ptr<Node> leftChild,
+                                     std::shared_ptr<Node> rightChild,
                                      long length, long slide,
                                      const std::string& timestampPropagator)
-    : WindowJoinOperator(timestampPropagator),
-      leftChild(leftChild),
-      rightChild(rightChild),
+    : WindowJoinOperator(leftChild, rightChild, timestampPropagator),
       length(length),
       slide(slide) {}
 
-SlidingWindowJoin::~SlidingWindowJoin() {
-  // Destructor implementation (can be empty)
-}
+SlidingWindowJoin::~SlidingWindowJoin() {}
 
-void SlidingWindowJoin::createWindows() {
+void SlidingWindowJoin::createWindows(
+    const std::shared_ptr<Stream>& leftStream,
+    const std::shared_ptr<Stream>& rightStream) {
   // Determine the minimum and maximum timestamps from both streams
-  long minTimestamp =
-      std::min(leftChild->getMinTimestamp(),
-               rightChild->getMinTimestamp());  // both are fixed to 0
+  long minTimestamp = std::min(leftStream->getMinTimestamp(),
+                               rightStream->getMinTimestamp());  // default is 0
   long maxTimestamp =
-      std::max(leftChild->getMaxTimestamp(), rightChild->getMaxTimestamp());
+      std::max(leftStream->getMaxTimestamp(), rightStream->getMaxTimestamp());
 
   // Align windows with the logical clock, starting from minTimestamp
-  for (long windowStart = minTimestamp;
-       windowStart <=
-       (maxTimestamp - length);  // TODO: Max length stuff might break here.
+  for (long windowStart = minTimestamp; windowStart <= (maxTimestamp - length);
        windowStart += slide) {
     long windowEnd = windowStart + length;
     windows.emplace_back(windowStart, windowEnd);
   }
 
-  // Assign left tuples to windows // TODO: Consider using a proper algorithm
-  // here if this takes too long.
-  for (const auto& tuple : leftChild->getTuples()) {
+  // Assign left tuples to windows
+  for (const auto& tuple : leftStream->getTuples()) {
     for (auto& window : windows) {
-      if (tuple.timestamp >= window.getStart() &&
-          tuple.timestamp < window.getEnd()) {
+      if (tuple.getTimestamp() >= window.getStart() &&
+          tuple.getTimestamp() < window.getEnd()) {
         window.addLeftTuple(tuple);
       }
     }
   }
 
   // Assign right tuples to windows
-  for (const auto& tuple : rightChild->getTuples()) {
+  for (const auto& tuple : rightStream->getTuples()) {
     for (auto& window : windows) {
-      if (tuple.timestamp >= window.getStart() &&
-          tuple.timestamp < window.getEnd()) {
+      if (tuple.getTimestamp() >= window.getStart() &&
+          tuple.getTimestamp() < window.getEnd()) {
         window.addRightTuple(tuple);
       }
     }
@@ -78,10 +72,12 @@ void SlidingWindowJoin::createWindows() {
 
 std::shared_ptr<Stream> SlidingWindowJoin::compute() {
   std::vector<Tuple> results;
+  auto leftStream = leftChild->getOutputStream();
+  auto rightStream = rightChild->getOutputStream();
 
   // Ensure windows are created
   if (windows.empty()) {
-    createWindows();
+    createWindows(leftStream, rightStream);
   }
 
   // Perform join for each window
@@ -98,16 +94,16 @@ std::shared_ptr<Stream> SlidingWindowJoin::compute() {
 
         // Determine timestamp
         long timestamp;
-        if (leftChild->getBaseStreams().count(timestampPropagator) > 0) {
+        if (leftStream->getBaseStreams().count(timestampPropagator) > 0) {
           timestamp = leftTuple.timestamp;
-        } else if (rightChild->getBaseStreams().count(timestampPropagator) >
+        } else if (rightStream->getBaseStreams().count(timestampPropagator) >
                    0) {
           timestamp = rightTuple.timestamp;
         } else {
           std::string leftChildBaseStreamsStr =
-              baseStreamsToString(leftChild->getBaseStreams());
+              baseStreamsToString(leftStream->getBaseStreams());
           std::string rightChildBaseStreamsStr =
-              baseStreamsToString(rightChild->getBaseStreams());
+              baseStreamsToString(rightStream->getBaseStreams());
 
           throw std::runtime_error(
               "Timestamp propagator '" + timestampPropagator +
@@ -129,14 +125,14 @@ std::shared_ptr<Stream> SlidingWindowJoin::compute() {
   eliminateDuplicates(results);
 
   // Create a new Stream with a name representing the join
-  std::string streamName = leftChild->getName() + "_" + rightChild->getName();
+  std::string streamName = leftStream->getName() + "_" + rightStream->getName();
   auto outputStream = std::make_shared<Stream>(streamName, false);
 
   // Set the base streams of the output stream to be the union of the base
   // streams of left and right children
-  std::unordered_set<std::string> baseStreams = leftChild->getBaseStreams();
-  baseStreams.insert(rightChild->getBaseStreams().begin(),
-                     rightChild->getBaseStreams().end());
+  std::unordered_set<std::string> baseStreams = leftStream->getBaseStreams();
+  baseStreams.insert(rightStream->getBaseStreams().begin(),
+                     rightStream->getBaseStreams().end());
   outputStream->setBaseStreams(baseStreams);
 
   // Add tuples to the output stream
@@ -159,4 +155,8 @@ void SlidingWindowJoin::eliminateDuplicates(std::vector<Tuple>& results) {
   for (const auto& item : uniqueTuples) {
     results.push_back({item.first, item.second});
   }
+}
+
+std::shared_ptr<Stream> SlidingWindowJoin::getOutputStream() {
+  return compute();
 }

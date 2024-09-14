@@ -22,3 +22,8 @@ compile_commands.json
 .clangd/
 .clang-format
 .clang-tidy
+
+# Ignore dirs
+.cache/
+.vscode/
+build/

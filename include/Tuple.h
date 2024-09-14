@@ -28,6 +28,8 @@
 struct Tuple {
   std::vector<long> values;
   long timestamp;
+
+  const long getTimestamp() const { return timestamp; }
 };
 
 #endif  // TUPLE_H
