@@ -1,5 +1,3 @@
-# tests/CMakeLists.txt
-
 enable_testing()
 
 # Include FetchContent module to download GTest if not found
@@ -16,15 +14,18 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 # Download and make available googletest
 FetchContent_MakeAvailable(googletest)
 
+# List of test sources
 set(TEST_SOURCES
-    test_window_join.cpp
-    # Add other test files here
+    test_window_join.cpp  # Your existing tests for output results
+    test_join_reordering.cpp  # New test file for join reordering tests
 )
 
+# Create the test executable
 add_executable(runTests ${TEST_SOURCES})
 
 # Link the test executable with WindowJoinLib and GTest
 target_link_libraries(runTests PRIVATE WindowJoinLib GTest::gtest_main)
 
+# Include GoogleTest for automatic test discovery
 include(GoogleTest)
 gtest_discover_tests(runTests)

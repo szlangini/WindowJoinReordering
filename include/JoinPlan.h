@@ -12,6 +12,10 @@ class JoinPlan {
   // Calls compute on the root node
   std::shared_ptr<Stream> compute();
 
+  std::string getJoinOrder() const { return root->getName(); }
+
+  std::shared_ptr<Node> getRoot() const { return root; }
+
  private:
   std::shared_ptr<Node> root;
 };

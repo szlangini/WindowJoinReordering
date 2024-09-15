@@ -2,7 +2,7 @@
 
 #include "Stream.h"
 
-Stream::Stream(const std::string& name, bool isBaseStream) : name(name) {
+Stream::Stream(const std::string& name, bool isBaseStream) : Node(name) {
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
@@ -11,7 +11,7 @@ Stream::Stream(const std::string& name, bool isBaseStream) : name(name) {
 
 Stream::Stream(const std::string& name, const std::vector<Tuple>& tuples,
                bool isBaseStream)
-    : name(name), tuples(tuples) {
+    : Node(name), tuples(tuples) {
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
@@ -25,8 +25,6 @@ void Stream::addTuple(const std::vector<long>& values, long timestamp) {
 void Stream::addTuple(Tuple& tuple) { tuples.push_back(tuple); }
 
 const std::vector<Tuple>& Stream::getTuples() const { return tuples; }
-
-const std::string& Stream::getName() const { return name; }
 
 long Stream::getMinTimestamp() const {
   //   if (tuples.empty()) return 0;

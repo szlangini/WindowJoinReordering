@@ -7,6 +7,7 @@ set(SOURCES
     SlidingWindowJoin.cpp
     ResultEvaluator.cpp
     JoinPlan.cpp
+    JoinOrderer.cpp
     # Add other source files here
 )
 

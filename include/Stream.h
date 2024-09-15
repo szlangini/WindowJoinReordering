@@ -23,8 +23,6 @@ class Stream : public Node {
 
   const std::vector<Tuple>& getTuples() const;
 
-  const std::string& getName() const;
-
   long getMinTimestamp() const;
   long getMaxTimestamp() const;
 
@@ -35,7 +33,6 @@ class Stream : public Node {
   std::shared_ptr<Stream> getOutputStream() override;
 
  private:
-  std::string name;
   std::vector<Tuple> tuples;
   std::unordered_set<std::string> baseStreams;
 };
