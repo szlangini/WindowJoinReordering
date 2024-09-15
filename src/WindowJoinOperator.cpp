@@ -8,3 +8,10 @@ WindowJoinOperator::WindowJoinOperator(const std::shared_ptr<Node>& leftChild,
       leftChild(leftChild),
       rightChild(rightChild),
       timestampPropagator(timestampPropagator) {}
+
+std::shared_ptr<Node> WindowJoinOperator::getLeftChild() { return leftChild; }
+std::shared_ptr<Node> WindowJoinOperator::getRightChild() { return rightChild; }
+
+const std::string& WindowJoinOperator::getTimestampPropagator() {
+  return timestampPropagator;
+}

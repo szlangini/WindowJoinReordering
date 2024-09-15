@@ -1,73 +1,42 @@
+#include "JoinPlan.h"
+
 #include <sstream>
 
-#include "JoinOrderer.h"
 #include "SlidingWindowJoin.h"
-#include "Stream.h"
 
-// Helper to generate all permutations of streams
-void JoinOrderer::generatePermutations(
-    const std::vector<std::string>& streams,
-    std::vector<std::vector<std::string>>& permutations) {
-  std::vector<std::string> perm = streams;
-  do {
-    permutations.push_back(perm);
-  } while (std::next_permutation(perm.begin(), perm.end()));
-}
+JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 
-// Helper to split the join order name (e.g., "A_B_C" -> {"A", "B", "C"})
-std::vector<std::string> splitJoinOrder(const std::string& joinOrder) {
-  std::vector<std::string> streams;
-  std::stringstream ss(joinOrder);
-  std::string stream;
-  while (std::getline(ss, stream, '_')) {
-    streams.push_back(stream);
-  }
-  return streams;
-}
+// Calls compute on the root node and returns the output stream
+std::shared_ptr<Stream> JoinPlan::compute() { return root->getOutputStream(); }
 
-// Function to reorder the joins and return new JoinPlans
-std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
-    const std::shared_ptr<JoinPlan>& joinPlan) {
-  std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
+// Helper function to recursively build the string representation of the plan
+std::string buildJoinPlanString(const std::shared_ptr<Node>& node,
+                                int depth = 0) {
+  std::ostringstream oss;
+  std::string indent(depth * 2,
+                     ' ');  // Indentation to make the hierarchy clearer
 
-  // Get the current join order from the root node's name (e.g., "A_B_C")
-  std::string currentOrder = joinPlan->getJoinOrder();
+  if (auto stream = std::dynamic_pointer_cast<Stream>(node)) {
+    // If the node is a Stream, just print the stream name
+    oss << indent << "Stream: " << stream->getName() << "\n";
+  } else if (auto join = std::dynamic_pointer_cast<SlidingWindowJoin>(node)) {
+    // If the node is a SlidingWindowJoin, print its properties
+    oss << indent << "SlidingWindowJoin(";
+    oss << "Length: " << join->getLength() << ", Slide: " << join->getSlide();
+    oss << ", Propagator: " << join->getTimestampPropagator() << ")\n";
 
-  // Split the currentOrder string into individual stream names (e.g., "A_B_C"
-  // becomes ["A", "B", "C"])
-  std::vector<std::string> streams = splitJoinOrder(currentOrder);
-
-  // Generate all possible permutations of the current order
-  std::vector<std::vector<std::string>> permutations;
-  generatePermutations(streams, permutations);
-
-  // Create new join plans for each permutation, pruning invalid ones
-  for (const auto& perm : permutations) {
-    // Rebuild the join structure dynamically based on the permutation
-    std::shared_ptr<SlidingWindowJoin> join;
-
-    // Dynamically create streams based on the permutation order
-    std::shared_ptr<Stream> stream1 = std::make_shared<Stream>(perm[0]);
-    std::shared_ptr<Stream> stream2 = std::make_shared<Stream>(perm[1]);
-    std::shared_ptr<Stream> stream3 = std::make_shared<Stream>(perm[2]);
-
-    long length = 10;
-    long slide = 10;  // Tumbling window
-
-    // Rebuild the joins based on the current permutation
-    auto join12 = std::make_shared<SlidingWindowJoin>(
-        stream1, stream2, length, slide, stream1->getName());
-    join = std::make_shared<SlidingWindowJoin>(join12, stream3, length, slide,
-                                               stream1->getName());
-
-    // Create a new JoinPlan for the reordered join
-    auto newJoinPlan = std::make_shared<JoinPlan>(join);
-
-    // Prune invalid join plans
-    if (prunePermutations(newJoinPlan)) {
-      reorderedPlans.push_back(newJoinPlan);
-    }
+    // Recursively print the left and right children
+    oss << indent << "Left:\n"
+        << buildJoinPlanString(join->getLeftChild(), depth + 1);
+    oss << indent << "Right:\n"
+        << buildJoinPlanString(join->getRightChild(), depth + 1);
+  } else {
+    // Handle unknown node types (should not happen)
+    oss << indent << "Unknown node type\n";
   }
 
-  return reorderedPlans;
+  return oss.str();
 }
+
+// JoinPlan::toString() function
+std::string JoinPlan::toString() const { return buildJoinPlanString(root); }

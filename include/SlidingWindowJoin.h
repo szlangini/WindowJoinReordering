@@ -25,6 +25,9 @@ class SlidingWindowJoin : public WindowJoinOperator {
 
   void eliminateDuplicates(std::vector<Tuple>& results);
 
+  long getLength();
+  long getSlide();
+
  private:
   long length;
   long slide;

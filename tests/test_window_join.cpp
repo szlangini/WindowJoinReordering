@@ -1,5 +1,6 @@
 // tests/test_window_join.cpp
 
+// Tests correctness of window joins.
 #include <gtest/gtest.h>
 
 #include <iostream>

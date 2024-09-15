@@ -16,6 +16,8 @@ class JoinPlan {
 
   std::shared_ptr<Node> getRoot() const { return root; }
 
+  std::string toString() const;
+
  private:
   std::shared_ptr<Node> root;
 };

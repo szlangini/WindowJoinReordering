@@ -1,4 +1,5 @@
 // tests/test_join_reordering.cpp
+// Tests Reordering and result equality/inequality
 
 #include <gtest/gtest.h>
 
@@ -8,6 +9,8 @@
 #include "SlidingWindowJoin.h"
 #include "Stream.h"
 #include "Utils.h"
+
+#define DEBUG_MODE 1
 
 // Value Distributor Func for Automated Content Generation
 long linearValueDistribution(int index, int multiplicator) {
@@ -67,6 +70,8 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2) {
   long slide = length;
 
   // Create an initial JoinPlan for ABC
+  // TODO: Make "A" an optional argument so that time propagation can become
+  // also PT.
   auto joinAB = std::make_shared<SlidingWindowJoin>(A, B, length, slide, "A");
   auto joinABC =
       std::make_shared<SlidingWindowJoin>(joinAB, C, length, slide, "A");
@@ -90,6 +95,10 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2) {
   long referenceSum = evaluator.computeSum(referenceResult);
 
   for (const auto& plan : reorderedPlans) {
+#if DEBUG_MODE
+    std::cout << plan->toString();
+    std::cout << "\n\n";
+#endif
     auto resultStream = plan->compute();
     const auto& result = resultStream->getTuples();
     long resultSum = evaluator.computeSum(result);

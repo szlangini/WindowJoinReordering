@@ -160,3 +160,6 @@ void SlidingWindowJoin::eliminateDuplicates(std::vector<Tuple>& results) {
 std::shared_ptr<Stream> SlidingWindowJoin::getOutputStream() {
   return compute();
 }
+
+long SlidingWindowJoin::getLength() { return length; }
+long SlidingWindowJoin::getSlide() { return slide; };

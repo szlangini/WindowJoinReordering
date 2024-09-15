@@ -22,6 +22,11 @@ class WindowJoinOperator : public Node {
 
   std::shared_ptr<Stream> getOutputStream() override = 0;
 
+  std::shared_ptr<Node> getLeftChild();
+  std::shared_ptr<Node> getRightChild();
+
+  const std::string& getTimestampPropagator();
+
  protected:
   std::shared_ptr<Node> leftChild;
   std::shared_ptr<Node> rightChild;

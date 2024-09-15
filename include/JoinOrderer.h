@@ -20,6 +20,10 @@ class JoinOrderer {
 
   // Get rid of unnecessary/illegal permutations given a JoinPlan
   bool prunePermutations(const std::shared_ptr<JoinPlan>& joinPlan);
+
+  // Recursively gather all streams from the join tree
+  void gatherStreams(const std::shared_ptr<Node>& node,
+                     std::vector<std::shared_ptr<Stream>>& streams);
 };
 
 #endif  // JOIN_ORDERER_H
