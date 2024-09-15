@@ -16,8 +16,9 @@ FetchContent_MakeAvailable(googletest)
 
 # List of test sources
 set(TEST_SOURCES
-    test_window_join.cpp  # Your existing tests for output results
-    test_join_reordering.cpp  # New test file for join reordering tests
+    test_window_join.cpp
+    test_join_reordering.cpp
+    test_interval_join
 )
 
 # Create the test executable

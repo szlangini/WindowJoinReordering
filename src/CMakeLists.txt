@@ -5,6 +5,7 @@ set(SOURCES
     Window.cpp
     WindowJoinOperator.cpp
     SlidingWindowJoin.cpp
+    IntervalJoin.cpp
     ResultEvaluator.cpp
     JoinPlan.cpp
     JoinOrderer.cpp
