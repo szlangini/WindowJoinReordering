@@ -10,7 +10,7 @@
 #include "Stream.h"
 #include "Utils.h"
 
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 
 // Value Distributor Func for Automated Content Generation
 long linearValueDistribution(int index, int multiplicator) {

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -20,7 +21,7 @@ class JoinOrderer {
       std::vector<std::vector<std::string>>& permutations);
 
   // Get rid of unnecessary/illegal permutations given a JoinPlan
-  bool prunePermutations(const std::shared_ptr<JoinPlan>& joinPlan);
+  bool isValidPermutation(const std::shared_ptr<JoinPlan>& joinPlan);
 
   // Recursively gather all streams from the join tree
   void gatherStreams(

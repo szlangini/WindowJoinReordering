@@ -65,14 +65,24 @@ std::vector<std::string> splitJoinOrder(const std::string& joinOrder) {
   return streams;
 }
 
-bool JoinOrderer::prunePermutations(const std::shared_ptr<JoinPlan>& joinPlan) {
-  return true;  // TODO: Change
+std::string canonicalPair(const std::string& left, const std::string& right) {
+  if (left < right) {
+    return left + "_" + right;
+  } else {
+    return right + "_" + left;
+  }
+}
+
+bool JoinOrderer::isValidPermutation(
+    const std::shared_ptr<JoinPlan>& joinPlan) {
+  return true;
 }
 
 // Function to reorder the joins and return new JoinPlans
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
+  std::set<std::string> seenPairs;
 
   std::shared_ptr<Node> root = joinPlan->getRoot();
 
@@ -115,6 +125,15 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 #endif
     std::shared_ptr<SlidingWindowJoin> join;
 
+    // E.g., AB and BA both translate to AB
+    std::string firstPair = canonicalPair(perm[0], perm[1]);
+
+    // If the first pair has already been joined, skip this permutation
+    if (seenPairs.find(firstPair) != seenPairs.end()) {
+      continue;  // Move to the next permutation
+    }
+    seenPairs.insert(firstPair);
+
     // Rebuild the join tree using streams from the map (cloning)
     std::shared_ptr<Stream> leftStream =
         std::make_shared<Stream>(*streamMap.at(perm[0]));
@@ -139,7 +158,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     auto newJoinPlan = std::make_shared<JoinPlan>(join);
 
     // Prune invalid join plans
-    if (prunePermutations(newJoinPlan)) {
+    if (isValidPermutation(newJoinPlan)) {
       reorderedPlans.push_back(newJoinPlan);
     }
   }
