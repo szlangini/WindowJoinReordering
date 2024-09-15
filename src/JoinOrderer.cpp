@@ -9,6 +9,7 @@
 
 #include "SlidingWindowJoin.h"
 #include "Stream.h"
+#include "TimeDomain.h"
 
 #define DEBUG_MODE 0
 
@@ -81,23 +82,22 @@ bool JoinOrderer::isValidPermutation(
 // Function to reorder the joins and return new JoinPlans
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
+  const auto timeDomain = joinPlan->getTimeDomain();
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
   std::set<std::string> seenPairs;
-
   std::shared_ptr<Node> root = joinPlan->getRoot();
-
-  // Map to store the original streams by name
   std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+  std::vector<std::string> streamNames;
+  std::vector<std::vector<std::string>> permutations;
+
   gatherStreams(root, streamMap);
 
   // Extract the names of the streams for permutation generation
-  std::vector<std::string> streamNames;
   for (const auto& entry : streamMap) {
     streamNames.push_back(entry.first);
   }
 
   // Generate all possible permutations of the current streams
-  std::vector<std::vector<std::string>> permutations;
   generatePermutations(streamNames, permutations);
 
   // Get window properties from the root node if it's a SlidingWindowJoin
@@ -143,15 +143,16 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     // Start with a binary join for the first two streams using dynamic window
     // properties
     join = std::make_shared<SlidingWindowJoin>(
-        leftStream, rightStream, length, slide,
-        perm[0]);  // This must be changed on propagation for other cases.
+        leftStream, rightStream, length, slide, timeDomain,
+        timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
 
     // Continue joining with remaining streams in the permutation
     for (size_t i = 2; i < perm.size(); ++i) {
       std::shared_ptr<Stream> nextStream =
           std::make_shared<Stream>(*streamMap.at(perm[i]));
-      join = std::make_shared<SlidingWindowJoin>(join, nextStream, length,
-                                                 slide, perm[0]);
+      join = std::make_shared<SlidingWindowJoin>(
+          join, nextStream, length, slide, timeDomain,
+          timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
     }
 
     // Create a new JoinPlan for the reordered join

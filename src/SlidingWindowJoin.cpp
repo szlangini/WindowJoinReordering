@@ -6,28 +6,15 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace {
-// Helper function to convert base streams set to string
-std::string baseStreamsToString(
-    const std::unordered_set<std::string>& baseStreams) {
-  std::ostringstream oss;
-  oss << "{";
-  for (auto it = baseStreams.begin(); it != baseStreams.end(); ++it) {
-    oss << *it;
-    if (std::next(it) != baseStreams.end()) {
-      oss << ", ";
-    }
-  }
-  oss << "}";
-  return oss.str();
-}
-}  // namespace
+#include "TimeDomain.h"
 
 SlidingWindowJoin::SlidingWindowJoin(std::shared_ptr<Node> leftChild,
                                      std::shared_ptr<Node> rightChild,
                                      long length, long slide,
+                                     const TimeDomain timeDomain,
                                      const std::string& timestampPropagator)
-    : WindowJoinOperator(leftChild, rightChild, timestampPropagator),
+    : WindowJoinOperator(leftChild, rightChild, timeDomain,
+                         timestampPropagator),
       length(length),
       slide(slide) {}
 
@@ -92,28 +79,8 @@ std::shared_ptr<Stream> SlidingWindowJoin::compute() {
         combinedValues.insert(combinedValues.end(), rightTuple.values.begin(),
                               rightTuple.values.end());
 
-        // Determine timestamp
-        long timestamp;
-        if (leftStream->getBaseStreams().count(timestampPropagator) > 0) {
-          timestamp = leftTuple.timestamp;
-        } else if (rightStream->getBaseStreams().count(timestampPropagator) >
-                   0) {
-          timestamp = rightTuple.timestamp;
-        } else {
-          std::string leftChildBaseStreamsStr =
-              baseStreamsToString(leftStream->getBaseStreams());
-          std::string rightChildBaseStreamsStr =
-              baseStreamsToString(rightStream->getBaseStreams());
-
-          throw std::runtime_error(
-              "Timestamp propagator '" + timestampPropagator +
-              "' not found in base streams of either child.\n"
-              "Left child base streams: [" +
-              leftChildBaseStreamsStr +
-              "]\n"
-              "Right child base streams: [" +
-              rightChildBaseStreamsStr + "]");
-        }
+        long timestamp = determineTimestamp(window, leftTuple, rightTuple,
+                                            leftStream, rightStream);
 
         // Create new tuple
         Tuple resultTuple = {combinedValues, timestamp};

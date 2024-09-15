@@ -6,13 +6,16 @@
 
 #include "Node.h"
 #include "Stream.h"
+#include "TimeDomain.h"
 #include "Tuple.h"
+#include "Window.h"
 
 class WindowJoinOperator : public Node {
  public:
   WindowJoinOperator(const std::shared_ptr<Node>& leftChild,
                      const std::shared_ptr<Node>& rightChild,
-                     const std::string& timestampPropagator);
+                     const TimeDomain timeDomain,
+                     const std::string& timestampPropagator = "NONE");
 
   virtual ~WindowJoinOperator() = default;
 
@@ -26,11 +29,18 @@ class WindowJoinOperator : public Node {
   std::shared_ptr<Node> getRightChild();
 
   const std::string& getTimestampPropagator();
+  TimeDomain getTimeDomain() const;
+
+  long determineTimestamp(const Window&, const Tuple& leftTuple,
+                          const Tuple& rightTuple,
+                          const std::shared_ptr<Stream>& leftStream,
+                          const std::shared_ptr<Stream>& rightStream);
 
  protected:
   std::shared_ptr<Node> leftChild;
   std::shared_ptr<Node> rightChild;
   std::string timestampPropagator;
+  TimeDomain timeDomain;
 };
 
 #endif  // WINDOW_JOIN_OPERATOR_H

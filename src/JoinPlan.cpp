@@ -2,8 +2,6 @@
 
 #include <sstream>
 
-#include "SlidingWindowJoin.h"
-
 JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 
 // Calls compute on the root node and returns the output stream
@@ -40,3 +38,16 @@ std::string buildJoinPlanString(const std::shared_ptr<Node>& node,
 
 // JoinPlan::toString() function
 std::string JoinPlan::toString() const { return buildJoinPlanString(root); }
+
+TimeDomain JoinPlan::getTimeDomain() const {
+  // Try to cast the root node to WindowJoinOperator
+  auto windowJoinOperator = std::dynamic_pointer_cast<WindowJoinOperator>(root);
+
+  // If the cast succeeds, return the TimeDomain
+  if (windowJoinOperator) {
+    return windowJoinOperator->getTimeDomain();
+  }
+
+  // If the root node is not a WindowJoinOperator, throw an error
+  throw std::runtime_error("Root node is not a WindowJoinOperator");
+}

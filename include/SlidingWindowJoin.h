@@ -5,14 +5,14 @@
 #include <memory>
 #include <vector>
 
-#include "Window.h"
 #include "WindowJoinOperator.h"
 
 class SlidingWindowJoin : public WindowJoinOperator {
  public:
   SlidingWindowJoin(std::shared_ptr<Node> leftChild,
                     std::shared_ptr<Node> rightChild, long length, long slide,
-                    const std::string& timestampPropagator);
+                    const TimeDomain timeDomain,
+                    const std::string& timestampPropagator = "NONE");
 
   ~SlidingWindowJoin();
 

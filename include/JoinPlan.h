@@ -3,6 +3,8 @@
 
 #include <memory>
 
+#include "SlidingWindowJoin.h"
+#include "TimeDomain.h"
 #include "WindowJoinOperator.h"
 
 class JoinPlan {
@@ -17,6 +19,8 @@ class JoinPlan {
   std::shared_ptr<Node> getRoot() const { return root; }
 
   std::string toString() const;
+
+  TimeDomain getTimeDomain() const;
 
  private:
   std::shared_ptr<Node> root;
