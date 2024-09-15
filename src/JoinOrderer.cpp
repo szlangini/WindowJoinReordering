@@ -47,6 +47,8 @@ void JoinOrderer::generatePermutations(
     const std::vector<std::string>& streams,
     std::vector<std::vector<std::string>>& permutations) {
   std::vector<std::string> perm = streams;
+  // Sort the streams to ensure the permutations are generated correctly
+  std::sort(perm.begin(), perm.end());
   do {
     permutations.push_back(perm);
   } while (std::next_permutation(perm.begin(), perm.end()));
@@ -97,6 +99,11 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     slide = slidingJoin->getSlide();    // Dynamically get the slide
   }
 
+#if DEBUG_MODE
+  std::cout << "I found this many permutations: "
+            << std::to_string(permutations.size()) << std::endl;
+#endif
+
   // Create new join plans for each permutation, pruning invalid ones
   for (const auto& perm : permutations) {
 #if DEBUG_MODE
@@ -108,9 +115,11 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 #endif
     std::shared_ptr<SlidingWindowJoin> join;
 
-    // Rebuild the join tree using streams from the map
-    std::shared_ptr<Stream> leftStream = streamMap.at(perm[0]);
-    std::shared_ptr<Stream> rightStream = streamMap.at(perm[1]);
+    // Rebuild the join tree using streams from the map (cloning)
+    std::shared_ptr<Stream> leftStream =
+        std::make_shared<Stream>(*streamMap.at(perm[0]));
+    std::shared_ptr<Stream> rightStream =
+        std::make_shared<Stream>(*streamMap.at(perm[1]));
 
     // Start with a binary join for the first two streams using dynamic window
     // properties
@@ -120,7 +129,8 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 
     // Continue joining with remaining streams in the permutation
     for (size_t i = 2; i < perm.size(); ++i) {
-      std::shared_ptr<Stream> nextStream = streamMap.at(perm[i]);
+      std::shared_ptr<Stream> nextStream =
+          std::make_shared<Stream>(*streamMap.at(perm[i]));
       join = std::make_shared<SlidingWindowJoin>(join, nextStream, length,
                                                  slide, perm[0]);
     }

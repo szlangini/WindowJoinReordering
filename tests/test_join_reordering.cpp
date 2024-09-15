@@ -10,7 +10,7 @@
 #include "Stream.h"
 #include "Utils.h"
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 // Value Distributor Func for Automated Content Generation
 long linearValueDistribution(int index, int multiplicator) {
@@ -88,6 +88,11 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2) {
   // reordering non-dependent on timestamp propagator should be possible.
 
   ASSERT_GT(reorderedPlans.size(), 0) << "No reordering plans generated.";
+
+#if DEBUG_MODE
+  std::cout << "Found new plans - in total: "
+            << std::to_string(reorderedPlans.size()) << std::endl;
+#endif
 
   // Compute and compare results from all reordered plans
   ResultEvaluator evaluator;
