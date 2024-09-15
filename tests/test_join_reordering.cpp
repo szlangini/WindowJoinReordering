@@ -61,11 +61,13 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A1) {
 // (All incl. PT Processing)
 TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2) {
   // Use the helper function to create streams A, B, C
+  // for fuzzy-testing this has to be amended in loop!
   auto A = createStream("A", 5, linearValueDistribution, 100, 1);
   auto B = createStream("B", 5, linearValueDistribution, 100, 2);
   auto C = createStream("C", 5, linearValueDistribution, 100, 3);
 
   // Window settings -- equal size and length
+  // this should also be amended in fuzzy-testing
   long length = 10;
   long slide = length;
 

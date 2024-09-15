@@ -21,14 +21,17 @@ std::string demangle(const char* mangledName) {
                        : mangledName;  // Return demangled name if successful
 }
 
-void JoinOrderer::gatherStreams(const std::shared_ptr<Node>& node,
-                                std::vector<std::shared_ptr<Stream>>& streams) {
+void JoinOrderer::gatherStreams(
+    const std::shared_ptr<Node>& node,
+    std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
   if (auto stream = std::dynamic_pointer_cast<Stream>(node)) {
-    streams.push_back(stream);
+    // Store the stream by its name
+    streamMap[stream->getName()] = stream;
   } else if (auto slidingJoin =
                  std::dynamic_pointer_cast<SlidingWindowJoin>(node)) {
-    gatherStreams(slidingJoin->getLeftChild(), streams);
-    gatherStreams(slidingJoin->getRightChild(), streams);
+    // Recursively gather streams from the left and right children of the join
+    gatherStreams(slidingJoin->getLeftChild(), streamMap);
+    gatherStreams(slidingJoin->getRightChild(), streamMap);
   } else {
     // Demangle the class name for a more readable error message
     std::string typeName = demangle(typeid(*node).name());
@@ -69,15 +72,16 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
 
-  // Get the current root node of the join plan and gather all streams
   std::shared_ptr<Node> root = joinPlan->getRoot();
-  std::vector<std::shared_ptr<Stream>> streams;
-  gatherStreams(root, streams);
+
+  // Map to store the original streams by name
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+  gatherStreams(root, streamMap);
 
   // Extract the names of the streams for permutation generation
   std::vector<std::string> streamNames;
-  for (const auto& stream : streams) {
-    streamNames.push_back(stream->getName());
+  for (const auto& entry : streamMap) {
+    streamNames.push_back(entry.first);
   }
 
   // Generate all possible permutations of the current streams
@@ -104,19 +108,19 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 #endif
     std::shared_ptr<SlidingWindowJoin> join;
 
-    // Rebuild the join tree based on the current permutation of streams
-    // TODO: Find bug that prevents reordered JoinPlan from having tuples
-    std::shared_ptr<Stream> leftStream = std::make_shared<Stream>(perm[0]);
-    std::shared_ptr<Stream> rightStream = std::make_shared<Stream>(perm[1]);
+    // Rebuild the join tree using streams from the map
+    std::shared_ptr<Stream> leftStream = streamMap.at(perm[0]);
+    std::shared_ptr<Stream> rightStream = streamMap.at(perm[1]);
 
     // Start with a binary join for the first two streams using dynamic window
     // properties
-    join = std::make_shared<SlidingWindowJoin>(leftStream, rightStream, length,
-                                               slide, perm[0]);
+    join = std::make_shared<SlidingWindowJoin>(
+        leftStream, rightStream, length, slide,
+        perm[0]);  // This must be changed on propagation for other cases.
 
     // Continue joining with remaining streams in the permutation
     for (size_t i = 2; i < perm.size(); ++i) {
-      std::shared_ptr<Stream> nextStream = std::make_shared<Stream>(perm[i]);
+      std::shared_ptr<Stream> nextStream = streamMap.at(perm[i]);
       join = std::make_shared<SlidingWindowJoin>(join, nextStream, length,
                                                  slide, perm[0]);
     }

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "JoinPlan.h"
@@ -22,8 +23,9 @@ class JoinOrderer {
   bool prunePermutations(const std::shared_ptr<JoinPlan>& joinPlan);
 
   // Recursively gather all streams from the join tree
-  void gatherStreams(const std::shared_ptr<Node>& node,
-                     std::vector<std::shared_ptr<Stream>>& streams);
+  void gatherStreams(
+      const std::shared_ptr<Node>& node,
+      std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap);
 };
 
 #endif  // JOIN_ORDERER_H
