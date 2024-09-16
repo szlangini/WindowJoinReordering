@@ -9,6 +9,7 @@ set(SOURCES
     ResultEvaluator.cpp
     JoinPlan.cpp
     JoinOrderer.cpp
+    Utils.cpp
     # Add other source files here
 )
 
