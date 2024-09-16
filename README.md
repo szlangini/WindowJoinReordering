@@ -35,22 +35,30 @@ We can compute joins for automatic stream generators and validate against other 
 ### Build Instructions
 
 1. **Clone the repository** and navigate to the project directory.
-   ```bash
-   git clone <repo-url>
-   cd WindowJoinReordering
-   ```
+```bash
+git clone <repo-url>
+cd WindowJoinReordering
+```
 
 2. **Create a build directory** and navigate to it.
+```bash
 mkdir build
 cd build
+```
+
 
 3. **Configure the build** using CMake
+```bash
 cmake ..
+```
 
 4. **Build the project**
+```bash
 cmake --build .
+```
 
 ### Running Tests
+```bash
 ./tests/runTests
-
+```
 
