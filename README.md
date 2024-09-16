@@ -36,7 +36,7 @@ We can compute joins for automatic stream generators and validate against other 
 
 1. **Clone the repository** and navigate to the project directory.
 ```bash
-git clone <repo-url>
+git clone git@github.com:szlangini/WindowJoinReordering.git
 cd WindowJoinReordering
 ```
 
