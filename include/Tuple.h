@@ -3,6 +3,7 @@
 #ifndef TUPLE_H
 #define TUPLE_H
 
+#include <sstream>
 #include <vector>
 
 /**
@@ -31,6 +32,19 @@ struct Tuple {
 
   const long getTimestamp() const { return timestamp; }
   const std::vector<long> getValues() const { return values; }
+
+  const std::string toString() const {
+    std::stringstream os;
+    if (values.size() > 0) {
+      os << '(';
+    }
+    for (size_t i = 0; i < values.size(); ++i) {
+      os << values[i];
+      if (i < values.size() - 1) os << ", ";
+    }
+    os << "), Timestamp: " << timestamp << "\n";
+    return os.str();
+  }
 };
 
 #endif  // TUPLE_H

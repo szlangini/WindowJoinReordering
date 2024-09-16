@@ -9,8 +9,10 @@
 // Constructor
 IntervalJoin::IntervalJoin(std::shared_ptr<Node> leftChild,
                            std::shared_ptr<Node> rightChild, long lowerBound,
-                           long upperBound)
-    : WindowJoinOperator(leftChild, rightChild, TimeDomain::EVENT_TIME),
+                           long upperBound,
+                           const std::string& timestampPropagator)
+    : WindowJoinOperator(leftChild, rightChild, TimeDomain::EVENT_TIME,
+                         timestampPropagator),
       lowerBound(lowerBound),
       upperBound(upperBound) {}
 
@@ -64,8 +66,9 @@ std::shared_ptr<Stream> IntervalJoin::compute() {
         combinedValues.insert(combinedValues.end(), rightTuple.values.begin(),
                               rightTuple.values.end());
 
-        long timestamp =
-            std::max(leftTuple.getTimestamp(), rightTuple.getTimestamp());
+        long timestamp = determineTimestamp(window, leftTuple, rightTuple,
+                                            leftStream, rightStream);
+        // std::max(leftTuple.getTimestamp(), rightTuple.getTimestamp());
 
         // Create new tuple
         Tuple resultTuple = {combinedValues, timestamp};

@@ -16,9 +16,9 @@ FetchContent_MakeAvailable(googletest)
 
 # List of test sources
 set(TEST_SOURCES
-    test_window_join.cpp
-    test_join_reordering.cpp
-    test_interval_join
+    test_swj.cpp
+    test_swj_reordering.cpp
+    test_ivj.cpp
 )
 
 # Create the test executable

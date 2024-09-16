@@ -7,7 +7,7 @@ class IntervalJoin : public WindowJoinOperator {
  public:
   IntervalJoin(std::shared_ptr<Node> leftChild,
                std::shared_ptr<Node> rightChild, long lowerBound,
-               long upperBound);
+               long upperBound, const std::string& timestampPropagator);
 
   ~IntervalJoin();
 

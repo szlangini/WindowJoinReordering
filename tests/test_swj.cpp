@@ -1,4 +1,4 @@
-// tests/test_window_join.cpp
+// tests/test_swj.cpp
 
 // Tests correctness of window joins.
 #include <gtest/gtest.h>

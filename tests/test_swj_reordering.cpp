@@ -1,4 +1,4 @@
-// tests/test_join_reordering.cpp
+// tests/test_swj_reordering.cpp
 // Tests Reordering and result equality/inequality
 
 #include <gtest/gtest.h>
