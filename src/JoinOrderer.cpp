@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 
+#include "IntervalJoin.h"
 #include "SlidingWindowJoin.h"
 #include "Stream.h"
 #include "TimeDomain.h"
@@ -33,13 +34,19 @@ void JoinOrderer::gatherStreams(
     // Recursively gather streams from the left and right children of the join
     gatherStreams(slidingJoin->getLeftChild(), streamMap);
     gatherStreams(slidingJoin->getRightChild(), streamMap);
+  } else if (auto intervalJoin =
+                 std::dynamic_pointer_cast<IntervalJoin>(node)) {
+    // Handle IntervalJoin: Recursively gather streams from left and right
+    // children
+    gatherStreams(intervalJoin->getLeftChild(), streamMap);
+    gatherStreams(intervalJoin->getRightChild(), streamMap);
   } else {
     // Demangle the class name for a more readable error message
     std::string typeName = demangle(typeid(*node).name());
     throw std::runtime_error(
         "Unknown node type encountered in join tree: " + node->getName() +
         ". Actual type: " + typeName +
-        ". Expected either a Stream or SlidingWindowJoin.");
+        ". Expected either a Stream, SlidingWindowJoin, or IntervalJoin.");
   }
 }
 
@@ -90,6 +97,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   std::vector<std::string> streamNames;
   std::vector<std::vector<std::string>> permutations;
 
+  // Gather all streams involved in the join
   gatherStreams(root, streamMap);
 
   // Extract the names of the streams for permutation generation
@@ -100,59 +108,72 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   // Generate all possible permutations of the current streams
   generatePermutations(streamNames, permutations);
 
-  // Get window properties from the root node if it's a SlidingWindowJoin
-  long length;
-  long slide;
+  // Window properties
+  long length = 0, slide = 0;
+  long lowerBound = 0, upperBound = 0;
+  bool isSlidingWindow = false;
 
   if (auto slidingJoin = std::dynamic_pointer_cast<SlidingWindowJoin>(root)) {
-    length = slidingJoin->getLength();  // Dynamically get the length
-    slide = slidingJoin->getSlide();    // Dynamically get the slide
+    length = slidingJoin->getLength();
+    slide = slidingJoin->getSlide();
+    isSlidingWindow = true;
+  } else if (auto intervalJoin =
+                 std::dynamic_pointer_cast<IntervalJoin>(root)) {
+    lowerBound = intervalJoin->getLowerBound();
+    upperBound = intervalJoin->getUpperBound();
+    isSlidingWindow = false;
   }
 
-#if DEBUG_MODE
-  std::cout << "I found this many permutations: "
-            << std::to_string(permutations.size()) << std::endl;
-#endif
-
-  // Create new join plans for each permutation, pruning invalid ones
+  // Create new join plans for each permutation
   for (const auto& perm : permutations) {
 #if DEBUG_MODE
     for (const auto& streamName : perm) {
       std::cout << streamName << ", ";
     }
     std::cout << '\n';
-
 #endif
-    std::shared_ptr<SlidingWindowJoin> join;
 
-    // E.g., AB and BA both translate to AB
+    std::shared_ptr<WindowJoinOperator> join;
+
+    // Canonical pair check for commutative join avoidance
     std::string firstPair = canonicalPair(perm[0], perm[1]);
 
-    // If the first pair has already been joined, skip this permutation
     if (seenPairs.find(firstPair) != seenPairs.end()) {
-      continue;  // Move to the next permutation
+      continue;  // Skip redundant permutations
     }
     seenPairs.insert(firstPair);
 
-    // Rebuild the join tree using streams from the map (cloning)
+    // Get left and right streams
     std::shared_ptr<Stream> leftStream =
         std::make_shared<Stream>(*streamMap.at(perm[0]));
     std::shared_ptr<Stream> rightStream =
         std::make_shared<Stream>(*streamMap.at(perm[1]));
 
-    // Start with a binary join for the first two streams using dynamic window
-    // properties
-    join = std::make_shared<SlidingWindowJoin>(
-        leftStream, rightStream, length, slide, timeDomain,
-        timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+    // Use the appropriate join operator (SlidingWindowJoin or IntervalJoin)
+    if (isSlidingWindow) {
+      join = std::make_shared<SlidingWindowJoin>(
+          leftStream, rightStream, length, slide, timeDomain,
+          timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+    } else {
+      // Ensure the propagator is correctly passed to the IntervalJoin
+      join = std::make_shared<IntervalJoin>(leftStream, rightStream, lowerBound,
+                                            upperBound, perm[0]);
+    }
 
     // Continue joining with remaining streams in the permutation
     for (size_t i = 2; i < perm.size(); ++i) {
       std::shared_ptr<Stream> nextStream =
           std::make_shared<Stream>(*streamMap.at(perm[i]));
-      join = std::make_shared<SlidingWindowJoin>(
-          join, nextStream, length, slide, timeDomain,
-          timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+
+      if (isSlidingWindow) {
+        join = std::make_shared<SlidingWindowJoin>(
+            join, nextStream, length, slide, timeDomain,
+            timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+      } else {
+        // Propagator for IntervalJoin (same rule applies, use left's timestamp)
+        join = std::make_shared<IntervalJoin>(join, nextStream, lowerBound,
+                                              upperBound, perm[0]);
+      }
     }
 
     // Create a new JoinPlan for the reordered join

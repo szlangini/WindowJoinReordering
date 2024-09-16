@@ -36,6 +36,9 @@ class WindowJoinOperator : public Node {
                           const std::shared_ptr<Stream>& leftStream,
                           const std::shared_ptr<Stream>& rightStream);
 
+  // identify join type
+  virtual std::string getJoinType() const = 0;
+
  protected:
   std::shared_ptr<Node> leftChild;
   std::shared_ptr<Node> rightChild;

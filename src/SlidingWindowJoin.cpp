@@ -130,3 +130,7 @@ std::shared_ptr<Stream> SlidingWindowJoin::getOutputStream() {
 
 long SlidingWindowJoin::getLength() { return length; }
 long SlidingWindowJoin::getSlide() { return slide; };
+
+std::string SlidingWindowJoin::getJoinType() const {
+  return "SlidingWindowJoin";
+}

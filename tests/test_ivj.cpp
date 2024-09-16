@@ -10,7 +10,7 @@
 #include "TimeDomain.h"
 #include "Utils.h"
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 // Test A: Instantiate ABC join and compute resultSum
 TEST(IntervalJoinTest, JoinABC_ET) {

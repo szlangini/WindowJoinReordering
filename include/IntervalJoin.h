@@ -21,6 +21,8 @@ class IntervalJoin : public WindowJoinOperator {
   const long getLowerBound() const;
   const long getUpperBound() const;
 
+  std::string getJoinType() const override;
+
  private:
   long lowerBound;
   long upperBound;

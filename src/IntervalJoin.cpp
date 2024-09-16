@@ -97,3 +97,5 @@ std::shared_ptr<Stream> IntervalJoin::getOutputStream() { return compute(); }
 
 const long IntervalJoin::getLowerBound() const { return lowerBound; }
 const long IntervalJoin::getUpperBound() const { return upperBound; }
+
+std::string IntervalJoin::getJoinType() const { return "IntervalJoin"; }

@@ -1,6 +1,9 @@
 #include "JoinPlan.h"
 
+#include <iostream>
 #include <sstream>
+
+#include "IntervalJoin.h"
 
 JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 
@@ -8,28 +11,37 @@ JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 std::shared_ptr<Stream> JoinPlan::compute() { return root->getOutputStream(); }
 
 // Helper function to recursively build the string representation of the plan
+
 std::string buildJoinPlanString(const std::shared_ptr<Node>& node,
                                 int depth = 0) {
   std::ostringstream oss;
-  std::string indent(depth * 2,
-                     ' ');  // Indentation to make the hierarchy clearer
+  std::string indent(depth * 2, ' ');  // Indentation for hierarchy
 
   if (auto stream = std::dynamic_pointer_cast<Stream>(node)) {
-    // If the node is a Stream, just print the stream name
+    // Print the stream name if it's a Stream
     oss << indent << "Stream: " << stream->getName() << "\n";
-  } else if (auto join = std::dynamic_pointer_cast<SlidingWindowJoin>(node)) {
-    // If the node is a SlidingWindowJoin, print its properties
-    oss << indent << "SlidingWindowJoin(";
-    oss << "Length: " << join->getLength() << ", Slide: " << join->getSlide();
-    oss << ", Propagator: " << join->getTimestampPropagator() << ")\n";
+  } else if (auto joinOp =
+                 std::dynamic_pointer_cast<WindowJoinOperator>(node)) {
+    // Use getJoinType() to determine the join type
+    oss << indent << joinOp->getJoinType() << "(";
+    if (joinOp->getJoinType() == "SlidingWindowJoin") {
+      auto slidingJoin = std::dynamic_pointer_cast<SlidingWindowJoin>(joinOp);
+      oss << "Length: " << slidingJoin->getLength()
+          << ", Slide: " << slidingJoin->getSlide();
+    } else if (joinOp->getJoinType() == "IntervalJoin") {
+      auto intervalJoin = std::dynamic_pointer_cast<IntervalJoin>(joinOp);
+      oss << "Lower Bound: " << intervalJoin->getLowerBound()
+          << ", Upper Bound: " << intervalJoin->getUpperBound();
+    }
+    oss << ", Propagator: " << joinOp->getTimestampPropagator() << ")\n";
 
-    // Recursively print the left and right children
+    // Recursively print left and right children
     oss << indent << "Left:\n"
-        << buildJoinPlanString(join->getLeftChild(), depth + 1);
+        << buildJoinPlanString(joinOp->getLeftChild(), depth + 1);
     oss << indent << "Right:\n"
-        << buildJoinPlanString(join->getRightChild(), depth + 1);
+        << buildJoinPlanString(joinOp->getRightChild(), depth + 1);
   } else {
-    // Handle unknown node types (should not happen)
+    // Handle unknown node types (shouldn't happen)
     oss << indent << "Unknown node type\n";
   }
 

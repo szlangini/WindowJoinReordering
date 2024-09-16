@@ -28,6 +28,8 @@ class SlidingWindowJoin : public WindowJoinOperator {
   long getLength();
   long getSlide();
 
+  std::string getJoinType() const override;
+
  private:
   long length;
   long slide;

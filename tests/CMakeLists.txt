@@ -19,6 +19,7 @@ set(TEST_SOURCES
     test_swj.cpp
     test_swj_reordering.cpp
     test_ivj.cpp
+    test_ivj_reordering.cpp
 )
 
 # Create the test executable
