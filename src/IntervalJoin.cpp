@@ -1,8 +1,10 @@
 #include "IntervalJoin.h"
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 
 #include "TimeDomain.h"
 
@@ -25,6 +27,13 @@ void IntervalJoin::createWindows(const std::shared_ptr<Stream>& leftStream,
     // Span window from left tuple
     auto startTimestamp = std::max(tuple.getTimestamp() - lowerBound, 0l);
     auto endTimestamp = tuple.getTimestamp() + upperBound;
+
+    if (startTimestamp > endTimestamp) {
+      std::swap(startTimestamp, endTimestamp);
+    }
+
+    std::cout << "(" << startTimestamp << ", " << endTimestamp << ")"
+              << std::endl;
 
     windows.emplace_back(startTimestamp, endTimestamp);
     windows[counter].addLeftTuple(
