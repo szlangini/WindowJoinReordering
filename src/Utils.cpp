@@ -20,7 +20,9 @@ std::shared_ptr<Stream> createStream(
   return stream;
 }
 
-long linearValueDistribution(int index, int multiplicator) { return index + 1; }
+long linearValueDistribution(int index, int multiplicator) {
+  return multiplicator * (index + 1);
+}
 
 long randomValueDistribution(int index, int multiplicator) {
   std::random_device rd;

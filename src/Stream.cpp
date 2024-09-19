@@ -2,6 +2,8 @@
 
 #include "Stream.h"
 
+#include <iostream>
+
 Stream::Stream(const std::string& name, bool isBaseStream) : Node(name) {
   if (isBaseStream) {
     baseStreams.insert(
@@ -49,4 +51,16 @@ void Stream::setBaseStreams(
 std::shared_ptr<Stream> Stream::getOutputStream() {
   // Stream simply returns itself as the output
   return std::make_shared<Stream>(*this);
+}
+
+void Stream::printTuples() const {
+  if (tuples.empty()) {
+    std::cout << "Empty Stream " << name << std::endl;
+    return;
+  }
+
+  std::cout << "Stream " << name << ":" << std::endl;
+  for (const auto& tuple : tuples) {
+    std::cout << tuple.toString() << std::endl;
+  }
 }

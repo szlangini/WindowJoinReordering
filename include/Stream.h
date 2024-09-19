@@ -32,6 +32,8 @@ class Stream : public Node {
 
   std::shared_ptr<Stream> getOutputStream() override;
 
+  void printTuples() const;
+
  private:
   std::vector<Tuple> tuples;
   std::unordered_set<std::string> baseStreams;
