@@ -37,7 +37,8 @@ void IntervalJoin::createWindows(const std::shared_ptr<Stream>& leftStream,
   for (const auto& tuple : rightStream->getTuples()) {
     for (auto& window : windows) {
       if (tuple.getTimestamp() >= window.getStart() &&
-          tuple.getTimestamp() < window.getEnd()) {
+          tuple.getTimestamp() <=
+              window.getEnd()) {  // Windows are on both sides inclusive here!
         window.addRightTuple(tuple);
       }
     }
