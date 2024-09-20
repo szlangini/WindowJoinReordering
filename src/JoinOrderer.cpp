@@ -223,8 +223,10 @@ bool JoinOrderer::isPruneablePlan(const std::string& firstPair,
 
   // Pruning logic: Ensure the permutation has a valid timestamp propagator
   if (perm[0] != timestampPropagator && perm[1] != timestampPropagator) {
-    return true;  // Skip this permutation since neither matches the timestamp
-                  // propagator
+    if (rootJoin->getTimeDomain() == TimeDomain::EVENT_TIME) {
+      return true;  // Skip this permutation since neither matches the timestamp
+                    // propagator, and its not processing time
+    }
   }
 
   return false;  // This plan is not pruneable
