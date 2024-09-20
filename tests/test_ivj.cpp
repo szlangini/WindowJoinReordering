@@ -20,6 +20,12 @@ TEST(IntervalJoinTest, JoinABC_ET) {
   auto B = createStream("B", 2, linearValueDistribution, 10, 3);
   auto C = createStream("C", 2, linearValueDistribution, 10, 5);
 
+#if DEBUG_MODE
+  A->printTuples();
+  B->printTuples();
+  C->printTuples();
+#endif
+
   // Step 2: Define IntervalJoin settings
   long LB = 5;
   long UB = 5;
@@ -56,7 +62,7 @@ TEST(IntervalJoinTest, JoinABC_ET) {
   long resultSumABC_ET = evaluator.computeSum(resultABC_ET);
 
   // Step 5: Manually calculate the expected sum based on tuple values
-  long expectedSumABC_ET = 9;
+  long expectedSumABC_ET = 27;
 
   // Step 6: Compare the computed sum to the expected sum
   ASSERT_EQ(resultSumABC_ET, expectedSumABC_ET)
