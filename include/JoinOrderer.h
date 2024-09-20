@@ -20,13 +20,16 @@ class JoinOrderer {
       const std::vector<std::string>& streams,
       std::vector<std::vector<std::string>>& permutations);
 
-  // Get rid of unnecessary/illegal permutations given a JoinPlan
-  bool isValidPermutation(const std::shared_ptr<JoinPlan>& joinPlan);
-
   // Recursively gather all streams from the join tree
   void gatherStreams(
       const std::shared_ptr<Node>& node,
       std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap);
+
+  // Skip unnecessary/invalid plans
+  bool isPruneablePlan(const std::string& firstPair,
+                       const std::shared_ptr<Node>& root,
+                       const std::vector<std::string>& perm,
+                       std::set<std::string>& seenPairs, bool isSlidingWindow);
 };
 
 #endif  // JOIN_ORDERER_H

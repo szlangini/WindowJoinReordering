@@ -81,11 +81,6 @@ std::string canonicalPair(const std::string& left, const std::string& right) {
   }
 }
 
-bool JoinOrderer::isValidPermutation(
-    const std::shared_ptr<JoinPlan>& joinPlan) {
-  return true;
-}
-
 // Function to reorder the joins and return new JoinPlans
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
@@ -113,6 +108,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   long lowerBound = 0, upperBound = 0;
   bool isSlidingWindow = false;
 
+  // Check if the root node is a SlidingWindowJoin or IntervalJoin
   if (auto slidingJoin = std::dynamic_pointer_cast<SlidingWindowJoin>(root)) {
     length = slidingJoin->getLength();
     slide = slidingJoin->getSlide();
@@ -124,7 +120,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     isSlidingWindow = false;
   }
 
-  // Create new join plans for each permutation
+  // Iterate over permutations to create new join plans
   for (const auto& perm : permutations) {
 #if DEBUG_MODE
     for (const auto& streamName : perm) {
@@ -135,42 +131,50 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 
     std::shared_ptr<WindowJoinOperator> join;
 
-    // Canonical pair check for commutative join avoidance
+    // Canonical pair check for commutative join avoidance (only for
+    // SlidingWindowJoin)
     std::string firstPair = canonicalPair(perm[0], perm[1]);
 
-    if (seenPairs.find(firstPair) != seenPairs.end()) {
-      continue;  // Skip redundant permutations
+    // Use the helper function to prune invalid plans
+    if (isPruneablePlan(firstPair, root, perm, seenPairs, isSlidingWindow)) {
+      continue;  // Skip this permutation since it's pruneable
     }
-    seenPairs.insert(firstPair);
 
-    // Get left and right streams
-    std::shared_ptr<Stream> leftStream =
-        std::make_shared<Stream>(*streamMap.at(perm[0]));
-    std::shared_ptr<Stream> rightStream =
-        std::make_shared<Stream>(*streamMap.at(perm[1]));
+    // Get left and right streams from the stream map
+    std::shared_ptr<Stream> leftStream = streamMap.at(perm[0]);
+    std::shared_ptr<Stream> rightStream = streamMap.at(perm[1]);
 
-    // Use the appropriate join operator (SlidingWindowJoin or IntervalJoin)
+    // Start with the appropriate join operator (SlidingWindowJoin or
+    // IntervalJoin)
     if (isSlidingWindow) {
       join = std::make_shared<SlidingWindowJoin>(
           leftStream, rightStream, length, slide, timeDomain,
           timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
     } else {
-      // Ensure the propagator is correctly passed to the IntervalJoin
-      join = std::make_shared<IntervalJoin>(leftStream, rightStream, lowerBound,
-                                            upperBound, perm[0]);
+      // For IntervalJoin, if commutative pair detected, swap bounds if
+      // necessary
+      long newLowerBound = lowerBound;
+      long newUpperBound = upperBound;
+
+      if (lowerBound != upperBound &&
+          perm[0] != root->getTimestampPropagator()) {
+        // Swap bounds if order is reversed for IntervalJoin
+        std::swap(newLowerBound, newUpperBound);
+      }
+
+      join = std::make_shared<IntervalJoin>(
+          leftStream, rightStream, newLowerBound, newUpperBound, perm[0]);
     }
 
-    // Continue joining with remaining streams in the permutation
+    // Continue joining with remaining streams (left-deep join)
     for (size_t i = 2; i < perm.size(); ++i) {
-      std::shared_ptr<Stream> nextStream =
-          std::make_shared<Stream>(*streamMap.at(perm[i]));
+      std::shared_ptr<Stream> nextStream = streamMap.at(perm[i]);
 
       if (isSlidingWindow) {
         join = std::make_shared<SlidingWindowJoin>(
             join, nextStream, length, slide, timeDomain,
             timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
       } else {
-        // Propagator for IntervalJoin (same rule applies, use left's timestamp)
         join = std::make_shared<IntervalJoin>(join, nextStream, lowerBound,
                                               upperBound, perm[0]);
       }
@@ -179,11 +183,39 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     // Create a new JoinPlan for the reordered join
     auto newJoinPlan = std::make_shared<JoinPlan>(join);
 
-    // Prune invalid join plans
-    if (isValidPermutation(newJoinPlan)) {
-      reorderedPlans.push_back(newJoinPlan);
-    }
+    // Add the plan to the reorderedPlans
+    reorderedPlans.push_back(newJoinPlan);
   }
 
   return reorderedPlans;
+}
+
+bool JoinOrderer::isPruneablePlan(const std::string& firstPair,
+                                  const std::shared_ptr<Node>& root,
+                                  const std::vector<std::string>& perm,
+                                  std::set<std::string>& seenPairs,
+                                  bool isSlidingWindow) {
+  // Apply commutative pair pruning only for SlidingWindowJoin
+  if (isSlidingWindow) {
+    if (seenPairs.find(firstPair) != seenPairs.end()) {
+      return true;  // Skip redundant permutations
+    }
+    seenPairs.insert(firstPair);
+  }
+
+  // Cast root to WindowJoinOperator to get the timestamp propagator
+  auto rootJoin = std::dynamic_pointer_cast<WindowJoinOperator>(root);
+  if (!rootJoin) {
+    throw std::runtime_error("Root node is not a WindowJoinOperator");
+  }
+
+  const auto& timestampPropagator = rootJoin->getTimestampPropagator();
+
+  // Pruning logic: Ensure the permutation has a valid timestamp propagator
+  if (perm[0] != timestampPropagator && perm[1] != timestampPropagator) {
+    return true;  // Skip this permutation since neither matches the timestamp
+                  // propagator
+  }
+
+  return false;  // This plan is not pruneable
 }

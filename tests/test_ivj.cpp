@@ -381,10 +381,10 @@ TEST(IntervalJoinTest,
   long resultSumBAC_Negated = evaluator.computeSum(resultBAC_Negated);
 
   // Step 20: Compare result sums of BAC with A and B as propagators
-  // ASSERT_NE(resultSumBAC, resultSumBAC_Negated)
-  //     << "Result sums should differ between BAC with A as propagator and "
-  //        "BAC "
-  //        "with B as propagator and negated bounds.";
+  ASSERT_NE(resultSumBAC, resultSumBAC_Negated)
+      << "Result sums should differ between BAC with A as propagator and "
+         "BAC "
+         "with B as propagator and negated bounds.";
 
   // Step 21: Compare result sums of ABC and BAC with negated bounds (expected
   // to be equal)
