@@ -91,6 +91,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
   std::vector<std::string> streamNames;
   std::vector<std::vector<std::string>> permutations;
+  std::string timestampPropagator;
 
   // Gather all streams involved in the join
   gatherStreams(root, streamMap);
@@ -144,26 +145,34 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     std::shared_ptr<Stream> leftStream = streamMap.at(perm[0]);
     std::shared_ptr<Stream> rightStream = streamMap.at(perm[1]);
 
+    if (auto slidingJoin = std::dynamic_pointer_cast<SlidingWindowJoin>(root)) {
+      timestampPropagator = slidingJoin->getTimestampPropagator();
+    } else if (auto intervalJoin =
+                   std::dynamic_pointer_cast<IntervalJoin>(root)) {
+      timestampPropagator = intervalJoin->getTimestampPropagator();
+    } else {
+      throw std::runtime_error("Unsupported join type in reordering.");
+    }
+
     // Start with the appropriate join operator (SlidingWindowJoin or
     // IntervalJoin)
     if (isSlidingWindow) {
       join = std::make_shared<SlidingWindowJoin>(
           leftStream, rightStream, length, slide, timeDomain,
-          timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+          timeDomain == TimeDomain::EVENT_TIME ? timestampPropagator : "NONE");
     } else {
-      // For IntervalJoin, if commutative pair detected, swap bounds if
-      // necessary
+      // For IntervalJoin, if commutative pair detected, swap bounds
       long newLowerBound = lowerBound;
       long newUpperBound = upperBound;
 
-      if (lowerBound != upperBound &&
-          perm[0] != root->getTimestampPropagator()) {
+      if (lowerBound != upperBound && perm[0] != timestampPropagator) {
         // Swap bounds if order is reversed for IntervalJoin
         std::swap(newLowerBound, newUpperBound);
       }
 
-      join = std::make_shared<IntervalJoin>(
-          leftStream, rightStream, newLowerBound, newUpperBound, perm[0]);
+      join =
+          std::make_shared<IntervalJoin>(leftStream, rightStream, newLowerBound,
+                                         newUpperBound, timestampPropagator);
     }
 
     // Continue joining with remaining streams (left-deep join)
@@ -173,10 +182,11 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       if (isSlidingWindow) {
         join = std::make_shared<SlidingWindowJoin>(
             join, nextStream, length, slide, timeDomain,
-            timeDomain == TimeDomain::EVENT_TIME ? perm[0] : "NONE");
+            timeDomain == TimeDomain::EVENT_TIME ? timestampPropagator
+                                                 : "NONE");
       } else {
         join = std::make_shared<IntervalJoin>(join, nextStream, lowerBound,
-                                              upperBound, perm[0]);
+                                              upperBound, timestampPropagator);
       }
     }
 

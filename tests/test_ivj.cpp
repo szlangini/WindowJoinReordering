@@ -13,6 +13,7 @@
 #define DEBUG_MODE 1
 
 // Test A: Instantiate ABC join and compute resultSum
+// TODO: See why this fails.
 TEST(IntervalJoinTest, JoinABC_ET) {
   // Step 1: Create streams
   auto A = createStream("A", 2, linearValueDistribution, 10, 1);
@@ -37,8 +38,8 @@ TEST(IntervalJoinTest, JoinABC_ET) {
 
 #endif
 
-  auto joinABC_ET =
-      std::make_shared<IntervalJoin>(joinAB_ABC_ET, C, LB, UB, "A");
+  auto joinABC_ET = std::make_shared<IntervalJoin>(
+      joinAB_ABC_ET, C, LB, UB, joinAB_ABC_ET->getTimestampPropagator());
   auto initialPlanABC_ET = std::make_shared<JoinPlan>(joinABC_ET);
 
   // Step 4: Compute Result from JoinPlan ABC

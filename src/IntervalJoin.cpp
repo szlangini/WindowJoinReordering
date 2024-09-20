@@ -32,8 +32,10 @@ void IntervalJoin::createWindows(const std::shared_ptr<Stream>& leftStream,
       std::swap(startTimestamp, endTimestamp);
     }
 
+#if 0
     std::cout << "(" << startTimestamp << ", " << endTimestamp << ")"
               << std::endl;
+#endif
 
     windows.emplace_back(startTimestamp, endTimestamp);
     windows[counter].addLeftTuple(

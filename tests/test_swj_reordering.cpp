@@ -107,6 +107,8 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2_ET) {
   }
 }
 
+// TODO: Check why we do not generate plans anymore.
+// Probably because neither perm[0], nor perm[1] == "none"
 TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A2_PT) {
   // Step 1: Create Streams A, B, C with sample data
   auto A = createStream("A", 5, linearValueDistribution, 100, 1);
