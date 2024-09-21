@@ -30,7 +30,11 @@ void SlidingWindowJoin::createWindows(
       std::max(leftStream->getMaxTimestamp(), rightStream->getMaxTimestamp());
 
   // Align windows with the logical clock, starting from minTimestamp
-  for (long windowStart = minTimestamp; windowStart <= (maxTimestamp - length);
+  for (long windowStart = minTimestamp;
+       windowStart <=
+       maxTimestamp;  // TODO: I fixed this was before ending with the max
+                      // timestamp, but that might lose some tuples. (was
+                      // maxTimestamp - length)
        windowStart += slide) {
     long windowEnd = windowStart + length;
     windows.emplace_back(windowStart, windowEnd);
