@@ -183,3 +183,70 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A4) {
   ASSERT_GT(1, 0);
   // TODO
 }
+
+TEST(SlidingWindowJoinTest, ABC_CAB_PT_A4_LWO_TEST) {
+  // Step 1: Create streams
+  auto A = createStream("A", 1000, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 200, linearValueDistribution, 100, 2);
+  auto C = createStream("C", 300, linearValueDistribution, 100, 3);
+
+  // Step 2: Define Window Settings for Case A4
+  // W1: Smaller window
+  long length_W1 = 10;
+  long slide_W1 = 10;  // Tumbling window for W1
+
+  // W2: Larger window
+  long length_W2 = 20;
+  long slide_W2 = 10;  // Overlapping windows for W2
+
+  // For LWO, we'll use the largest window (W2) for the reordered join plan
+  long length_LWO = length_W2;
+  long slide_LWO = slide_W2;
+
+  // Time Domain
+  TimeDomain timeDomain = TimeDomain::PROCESSING_TIME;
+
+  // Step 3: Create Initial JoinPlan for ABC using Original Windows
+  auto joinAB_A4_PT = std::make_shared<SlidingWindowJoin>(A, B, length_W1,
+                                                          slide_W1, timeDomain);
+  auto joinABC_A4_PT = std::make_shared<SlidingWindowJoin>(
+      joinAB_A4_PT, C, length_W1, slide_W1, timeDomain);
+  auto initialPlanABC_A4_PT = std::make_shared<JoinPlan>(joinABC_A4_PT);
+
+  // Step 4: Create Reordered JoinPlan for CAB using LWO and apply filter after
+  // Apply LWO by using the largest window for both joins
+  auto joinCA_A4_PT_LWO = std::make_shared<SlidingWindowJoin>(
+      C, A, length_LWO, slide_LWO, timeDomain);
+  auto joinCAB_A4_PT_LWO = std::make_shared<SlidingWindowJoin>(
+      joinCA_A4_PT_LWO, B, length_LWO, slide_LWO, timeDomain);
+
+  // Apply WindowFilter to enforce original window constraints of W1
+  auto filteredJoinCAB_A4_PT = std::make_shared<WindowFilter>(
+      joinCAB_A4_PT_LWO, length_W1, slide_W1, timeDomain);
+
+  auto initialPlanCAB_A4_PT = std::make_shared<JoinPlan>(filteredJoinCAB_A4_PT);
+
+  // Step 5: Compute Reference Result from Initial JoinPlan ABC
+  ResultEvaluator evaluator;
+  auto referenceStream_A4_PT = initialPlanABC_A4_PT->compute();
+  const auto& referenceResult_A4_PT = referenceStream_A4_PT->getTuples();
+  long referenceSum_A4_PT = evaluator.computeSum(referenceResult_A4_PT);
+
+  // Step 6: Compute Result from Reordered JoinPlan CAB with LWO and filtering
+  auto resultStreamCAB_A4_PT = initialPlanCAB_A4_PT->compute();
+  const auto& resultCAB_A4_PT = resultStreamCAB_A4_PT->getTuples();
+  long resultSumCAB_A4_PT = evaluator.computeSum(resultCAB_A4_PT);
+
+  // Step 7: Compare the Sums
+  ASSERT_EQ(referenceSum_A4_PT, resultSumCAB_A4_PT)
+      << "Results differ between ABC and CAB when using Processing Time with "
+         "LWO.";
+
+  // Step 8: Optionally, Compare the Actual Tuples
+  std::stringstream errorStream;
+  bool resultsEqual = evaluator.compareResults(referenceResult_A4_PT,
+                                               resultCAB_A4_PT, errorStream);
+  ASSERT_TRUE(resultsEqual) << "Result tuples differ between ABC and CAB with "
+                               "Processing Time and LWO:\n"
+                            << errorStream.str();
+}
