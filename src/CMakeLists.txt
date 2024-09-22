@@ -10,7 +10,6 @@ set(SOURCES
     JoinPlan.cpp
     JoinOrderer.cpp
     Utils.cpp
-    WindowFilter.cpp
     # Add other source files here
 )
 

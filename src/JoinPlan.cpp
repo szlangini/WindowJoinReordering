@@ -2,8 +2,11 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 #include "IntervalJoin.h"
+#include "Node.h"
+#include "WindowJoinOperator.h"
 
 JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 
@@ -62,4 +65,11 @@ TimeDomain JoinPlan::getTimeDomain() const {
 
   // If the root node is not a WindowJoinOperator, throw an error
   throw std::runtime_error("Root node is not a WindowJoinOperator");
+}
+
+std::string JoinPlan::getTimestampPropagator() const {
+  if (auto windowJoin = std::dynamic_pointer_cast<WindowJoinOperator>(root)) {
+    return windowJoin->getTimestampPropagator();
+  }
+  throw std::runtime_error("Unknown node.");
 }

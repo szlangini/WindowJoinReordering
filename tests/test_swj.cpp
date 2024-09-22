@@ -365,5 +365,3 @@ TEST(SlidingWindowJoinTest, ABC_CAB_ET_A4_TEST) {
       << "Result tuples are not equal between ABC and CAB join orders.\n"
       << errorStream.str();
 }
-
-

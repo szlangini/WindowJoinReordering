@@ -22,6 +22,8 @@ class JoinPlan {
 
   TimeDomain getTimeDomain() const;
 
+  std::string getTimestampPropagator() const;
+
  private:
   std::shared_ptr<Node> root;
 };
