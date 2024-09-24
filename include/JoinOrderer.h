@@ -63,7 +63,7 @@ class JoinOrderer {
 
   void createCommutativePairs(
       std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                         std::vector<WindowSpecification>>& windowAssignments)
+                         std::vector<WindowSpecification>>& windowAssignments);
 };
 
 #endif  // JOIN_ORDERER_H

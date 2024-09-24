@@ -237,11 +237,58 @@ JoinOrderer::getAllSlidingWindowJoinPermutations(
   return reorderedPlans;
 }
 
+// Warning: we use window specs here, but we do not know if they are legal.
 std::vector<std::shared_ptr<WindowJoinOperator>> JoinOrderer::decomposeJoinPair(
     const std::shared_ptr<WindowJoinOperator>& joinOperator) {
   std::vector<std::shared_ptr<WindowJoinOperator>> decomposedPairs;
 
-  // TODO: Finish
+  // Ensure the right child is a stream (not a join operator)
+  assert(joinOperator->getRightChild()
+             ->getOutputStream()
+             ->getBaseStreams()
+             .size() == 1);  // Check if right child is a single stream
+
+  // Ensure the left child is a join of exactly two base streams
+  assert(joinOperator->getLeftChild()
+             ->getOutputStream()
+             ->getBaseStreams()
+             .size() == 2);  // Check if left child is a two-way join
+
+  // Extract base streams from the left child
+  auto streams =
+      joinOperator->getLeftChild()->getOutputStream()->getBaseStreams();
+
+  // Loop through the base streams in the left child
+  for (const auto& streamName : streams) {
+    // Create a new join between each stream and the right child
+    std::shared_ptr<Stream> leftStream = std::make_shared<Stream>(streamName);
+    std::shared_ptr<Node> rightChild = joinOperator->getRightChild();
+
+    // Check if the original join is a SlidingWindowJoin
+    if (auto slidingJoin =
+            std::dynamic_pointer_cast<SlidingWindowJoin>(joinOperator)) {
+      auto newJoin = std::make_shared<SlidingWindowJoin>(
+          leftStream, std::dynamic_pointer_cast<Stream>(rightChild),
+          slidingJoin->getLength(),  // Retain length
+          slidingJoin->getSlide(),   // Retain slide
+          slidingJoin->getTimeDomain(), slidingJoin->getTimestampPropagator());
+
+      decomposedPairs.push_back(newJoin);
+
+      // Otherwise, it is an IntervalJoin
+    } else if (auto intervalJoin =
+                   std::dynamic_pointer_cast<IntervalJoin>(joinOperator)) {
+      auto newJoin = std::make_shared<IntervalJoin>(
+          leftStream, std::dynamic_pointer_cast<Stream>(rightChild),
+          intervalJoin->getLowerBound(),  // Retain lower bound
+          intervalJoin->getUpperBound(),
+          intervalJoin->getTimestampPropagator());  // Retain upper bound
+
+      decomposedPairs.push_back(newJoin);
+    }
+  }
+
+  return decomposedPairs;
 }
 
 void JoinOrderer::createCommutativePairs(
