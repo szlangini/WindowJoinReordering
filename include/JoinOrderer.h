@@ -61,8 +61,8 @@ class JoinOrderer {
   std::vector<JoinKey> decomposeJoinPair(const JoinKey& joinKey);
 
   void createCommutativePairs(
-      std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                         std::vector<WindowSpecification>>& windowAssignments);
+      std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
+          windowAssignments);
 };
 
 #endif  // JOIN_ORDERER_H

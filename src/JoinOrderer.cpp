@@ -97,7 +97,7 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
 
   auto currentNode = joinPlan->getRoot();
 
-  JoinKey joinKey;
+  JoinKey joinKey;  // AB:C_W2 & A:B_W1 will be emitted from ABC
 
   // Traverse the join tree in a left-deep manner
   while (currentNode) {
@@ -283,44 +283,23 @@ std::vector<JoinKey> JoinOrderer::decomposeJoinPair(const JoinKey& joinKey) {
 }
 
 void JoinOrderer::createCommutativePairs(
-    std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                       std::vector<WindowSpecification>>& windowAssignments) {
-  std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                     std::vector<WindowSpecification>>
-      newAssignments;
+    std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
+        windowAssignments) {
+  // Create a new container for commutative pairs
+  std::unordered_map<JoinKey, std::vector<WindowSpecification>> newAssignments;
 
   for (const auto& entry : windowAssignments) {
-    const auto& joinOperator = entry.first;
-    const auto& windowSpecs = entry.second;
+    const auto& joinKey = entry.first;  // Original join pair
+    const auto& windowSpecs =
+        entry.second;  // Corresponding window specifications
 
-    // Get the left and right children (streams) of the join operator
-    auto leftChild = joinOperator->getLeftChild();
-    auto rightChild = joinOperator->getRightChild();
+    // Create a commutative pair by swapping the left and right streams
+    JoinKey commutativePair;
+    commutativePair.leftStreams = joinKey.rightStreams;  // Swap left and right
+    commutativePair.rightStreams = joinKey.leftStreams;  // Swap right and left
+    commutativePair.joinType = joinKey.joinType;  // Keep the original join type
 
-    std::shared_ptr<WindowJoinOperator> commutativePair;
-
-    // Check if it's a SlidingWindowJoin or an IntervalJoin
-    if (auto slidingJoin =
-            std::dynamic_pointer_cast<SlidingWindowJoin>(joinOperator)) {
-      // Create commutative pair for SlidingWindowJoin
-      commutativePair = std::make_shared<SlidingWindowJoin>(
-          rightChild, leftChild, slidingJoin->getLength(),
-          slidingJoin->getSlide(), slidingJoin->getTimeDomain(),
-          slidingJoin->getTimestampPropagator());
-    } else if (auto intervalJoin =
-                   std::dynamic_pointer_cast<IntervalJoin>(joinOperator)) {
-      // Create commutative pair for IntervalJoin
-      commutativePair = std::make_shared<IntervalJoin>(
-          rightChild, leftChild, intervalJoin->getLowerBound(),
-          intervalJoin->getUpperBound(),
-          intervalJoin->getTimestampPropagator());
-    } else {
-      // Unknown join type
-      throw std::runtime_error(
-          "Unknown join operator type when creating commutative pairs.");
-    }
-
-    // Add the commutative pair with the same window specs
+    // Add the commutative pair with the same window specifications
     newAssignments[commutativePair] = windowSpecs;
   }
 
@@ -328,6 +307,7 @@ void JoinOrderer::createCommutativePairs(
   windowAssignments.insert(newAssignments.begin(), newAssignments.end());
 }
 
+// Input are AB:C with Window 2 and A:B with Window 1
 void JoinOrderer::createUpdatedWindowAssignments(
     std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
         windowAssignments,
@@ -343,28 +323,29 @@ void JoinOrderer::createUpdatedWindowAssignments(
     if (leftChildIsAJoin) {
       // Operator has a joined pair as the left child.
       // Decompose the join pair, e.g., ABC -> AB, BC
-      auto decomposedPairs = decomposeJoinPair(joinKey);
+      auto decomposedPairs = decomposeJoinPair(joinKey);  // AB, BC
 
       for (auto& decomposedPair : decomposedPairs) {
         // For each decomposedPair (joinPair) get the appropriate Window
         // Specification
-        auto windowSpec = windowAssignments.at(decomposedPair);
+        auto windowSpec = windowAssignments.at(
+            decomposedPair);  // AB: W_1, BC? nothing? // TODO: Continue here.
         auto timePropagator = timePropagators.at(windowSpec.front());
-        auto leftStreamName = decomposedPair->getLeftChild()->getName();
 
-        assert(windowSpec.size() == 1);
+        // Check the left stream's name in the decomposed pair
+        const auto& leftStreamNames = decomposedPair.leftStreams;
 
-        // CAUTION: This might be wrong
-        // if left stream.size > 2
-        if (leftStreamName == timePropagator) {
+        assert(windowSpec.size() > 0);  // there is currently at least one
+                                        // windowSpec for the decomposed pair.
+
+        if (leftStreamNames.find(timePropagator) != leftStreamNames.end()) {
           windowAssignments[decomposedPair].push_back(windowSpec.front());
         } else {
           // Add other window specs as needed
-          for (const auto& [joinOp, ws] : windowAssignments) {
-            // Ensure you're pushing individual WindowSpecification elements
-            for (const auto& singleSpec : ws) {
+          for (const auto& [key, ws] : windowAssignments) {
+            for (const auto& spec : ws) {
               windowAssignments[decomposedPair].push_back(
-                  singleSpec);  // TODO: Discuss with Ariane.
+                  spec);  // TODO: Discuss with Ariane why we do this.
             }
           }
         }
@@ -419,10 +400,12 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     createUpdatedWindowAssignments(windowAssignments, timestampPropagators);
   }
 
+  // Generate all possible join combinations
+  std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
+  auto joinPermutations = generateJoinPermutations(windowAssignments);
+
   // We can now generate every possible join combination
   // Iterate over the window assignments, see if we have the proper keys and get
-  // the windows for that. Problem is we need to use window joins as keys
-  // ignoring their window specs for the map.
 
   return std::vector<std::shared_ptr<JoinPlan>>();  // TODO: Change
 }
