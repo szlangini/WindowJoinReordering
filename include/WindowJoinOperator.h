@@ -2,6 +2,7 @@
 #ifndef WINDOW_JOIN_OPERATOR_H
 #define WINDOW_JOIN_OPERATOR_H
 
+#include <set>
 #include <string>
 
 #include "Node.h"
@@ -9,6 +10,41 @@
 #include "TimeDomain.h"
 #include "Tuple.h"
 #include "Window.h"
+#include "WindowSpecification.h"
+
+enum class JoinType { SlidingWindowJoin, IntervalJoin };
+struct JoinKey {
+  JoinType joinType;
+  std::unordered_set<std::string> leftStreams;
+  std::unordered_set<std::string> rightStreams;
+
+  bool operator==(const JoinKey& other) const {
+    return joinType == other.joinType && leftStreams == other.leftStreams &&
+           rightStreams == other.rightStreams;
+  }
+};
+
+// Custom hash for JoinKey
+struct JoinKeyHash {
+  std::size_t operator()(const JoinKey& key) const {
+    std::size_t h1 =
+        std::hash<int>{}(static_cast<int>(key.joinType));  // Hash the enum
+    std::size_t h2 = 0;
+    std::size_t h3 = 0;
+
+    // Hash the left streams
+    for (const auto& stream : key.leftStreams) {
+      h2 ^= std::hash<std::string>{}(stream);
+    }
+
+    // Hash the right streams
+    for (const auto& stream : key.rightStreams) {
+      h3 ^= std::hash<std::string>{}(stream);
+    }
+
+    return h1 ^ (h2 << 1) ^ (h3 << 2);  // Combine hashes
+  }
+};
 
 class WindowJoinOperator : public Node {
  public:

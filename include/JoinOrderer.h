@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "JoinPlan.h"
+#include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
 class JoinOrderer {
@@ -35,8 +36,7 @@ class JoinOrderer {
 
   // NEW STUFF
   std::pair<std::vector<WindowSpecification>,
-            std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                               std::vector<WindowSpecification>>>
+            std::unordered_map<JoinKey, std::vector<WindowSpecification>>>
   getWindowSpecificationsAndAssignments(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
@@ -53,13 +53,12 @@ class JoinOrderer {
 
   // Function to create updated window assignments for EVENT_TIME
   void createUpdatedWindowAssignments(
-      std::unordered_map<std::shared_ptr<WindowJoinOperator>,
-                         std::vector<WindowSpecification>>& windowAssignments,
+      std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
+          windowAssignments,
       const std::unordered_map<WindowSpecification, std::string>&
           timePropagators);
 
-  std::vector<std::shared_ptr<WindowJoinOperator>> decomposeJoinPair(
-      const std::shared_ptr<WindowJoinOperator>& joinOperator);
+  std::vector<JoinKey> decomposeJoinPair(const JoinKey& joinKey);
 
   void createCommutativePairs(
       std::unordered_map<std::shared_ptr<WindowJoinOperator>,
