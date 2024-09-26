@@ -65,8 +65,13 @@ class JoinOrderer {
       std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
           windowAssignments);
 
-          std::vector<JoinPermutation> generateAllJoinPermutations(
-    const std::shared_ptr<JoinPlan>& joinPlan
+  std::vector<JoinPermutation> generateAllJoinPermutations(
+      const std::shared_ptr<JoinPlan>& joinPlan);
+
+  std::shared_ptr<JoinPlan> buildJoinPlanFromPermutation(
+      const JoinPermutation& permutation,
+      const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
+          windowAssignments, const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap));
 };
 
 #endif  // JOIN_ORDERER_H

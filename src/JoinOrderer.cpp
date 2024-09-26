@@ -6,6 +6,7 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -359,9 +360,8 @@ void JoinOrderer::createUpdatedWindowAssignments(
 
 std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
     const std::shared_ptr<JoinPlan>& joinPlan) {
-  
   // Get joinType
-  
+  auto joinType = joinPlan->getJoinType();
 
   // Get the base streams from the join plan root
   std::unordered_set<std::string> baseStreams =
@@ -386,9 +386,7 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
       std::string right = perm[i + 1];
 
       // Create a new JoinKey for this pair
-      JoinKey joinKey({left}, {right},
-                      JoinType::SLIDING_WINDOW);  // Assume sliding window for
-                                                  // now, adjust later
+      JoinKey joinKey(joinType, {left}, {right});
 
       // Add this step to the permutation
       permutation.addJoinStep(joinKey);
@@ -401,6 +399,57 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
   return allPermutations;
 }
 
+std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
+    const JoinPermutation& permutation,
+    const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
+        windowAssignments,
+    const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
+  std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
+
+  // Iterate over the steps in the permutation
+  for (const auto& joinKey : permutation.getSteps()) {
+    auto windowSpecs =
+        windowAssignments.at(joinKey);  // Retrieve window specifications
+
+    // If there are no specs, return early.
+    if (windowSpecs.size() != 1) {
+      // invalid!
+      return nullptr;
+    }
+
+    // Assumption: joinKeys left and rightstreams are just one each here.
+    assert(joinKey.leftStreams.size() == 1);
+    assert(joinKey.rightStreams.size() == 1);
+
+    // Use the join type to create the appropriate join operator
+    if (joinKey.joinType == JoinType::SlidingWindowJoin) {
+      auto leftStream = 
+      currentJoin = std::make_shared<SlidingWindowJoin>()
+
+          /*
+                    std::shared_ptr<Node>
+                        leftChild,
+                std::shared_ptr<Node> rightChild, long length, long slide,
+                const TimeDomain timeDomain,
+                const std::string &timestampPropagator = "NONE"
+                */
+
+          currentJoin = std::make_shared<SlidingWindowJoin>(
+              /* Left Stream */ /* Right Stream */ windowSpecs[0].length,
+              windowSpecs[0].slide, TimeDomain::EVENT_TIME, "A");
+    } else if (joinKey.joinType == JoinType::IntervalJoin) {
+      currentJoin = std::make_shared<IntervalJoin>(
+          /* Left Stream */, /* Right Stream */, windowSpecs[0].lowerBound,
+          windowSpecs[0].upperBound, "A");
+    } else {
+      throw std::runtime_error("Unknown JoinType");
+    }
+  }
+
+  // Return the final JoinPlan
+  return std::make_shared<JoinPlan>(currentJoin);
+}
+
 // Clean solution for reordering.
 // 1. Get window specifications [x]
 // 2. Get window assignments [x]
@@ -408,7 +457,7 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
 // 4. Check TimeDomain [x]
 // 5.1 Call PT Orderer [x] (misses LWO...)
 // 5.2 Call ET Orderer [x]
-// 6. Generate Permutations for Joins. []
+// 6. Generate Permutations for Joins. [X]
 // 7. Iterate over Permutations []
 // 7.1 Try to assign Window Operator []
 // 7.1.1 fail => return []
@@ -423,6 +472,9 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   auto timeDomain = joinPlan->getTimeDomain();
 
   auto timestampPropagators = getTimestampPropagators(joinPlan, windowSpecs);
+
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+  gatherStreams(joinPlan->getRoot(), streamMap);
 
   // Early return if there is a problem retrieving the values.
   if (windowSpecs.empty() || windowAssignments.empty() ||
@@ -447,8 +499,18 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   }
 
   // Generate all possible join combinations
-  std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
+  std::vector<std::shared_ptr<JoinPlan>> validJoinPlans;
   auto joinPermutations = generateAllJoinPermutations(joinPlan);
+
+  for (const auto& perm : joinPermutations) {
+    std::shared_ptr<JoinPlan> newPlan =
+        buildJoinPlanFromPermutation(perm, windowAssignments, streamMap);
+    if (newPlan) {  // might be nullptr!
+      validJoinPlans.push_back(newPlan);
+    }
+  }
+
+  return validJoinPlans;
 
   // Assign Window: if success => Craft Join with windowSpecs, propagator and
   // permutation.
@@ -466,8 +528,6 @@ return 𝑞𝑝𝑒𝑟𝑚
    */
 
   //
-
-  return std::vector<std::shared_ptr<JoinPlan>>();  // TODO: Change
 }
 
 // Function to reorder the joins and return new JoinPlans

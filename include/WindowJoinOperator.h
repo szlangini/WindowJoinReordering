@@ -18,6 +18,10 @@ struct JoinKey {
   std::unordered_set<std::string> leftStreams;
   std::unordered_set<std::string> rightStreams;
 
+  JoinKey(JoinType type, const std::unordered_set<std::string>& left,
+          const std::unordered_set<std::string>& right)
+      : joinType(type), leftStreams(left), rightStreams(right) {}
+
   bool operator==(const JoinKey& other) const {
     return joinType == other.joinType && leftStreams == other.leftStreams &&
            rightStreams == other.rightStreams;
