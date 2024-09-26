@@ -255,19 +255,19 @@ std::vector<JoinKey> JoinOrderer::decomposeJoinPair(const JoinKey& joinKey) {
 
   // Extract base streams from the left child
   const auto& leftStreams = joinKey.leftStreams;
-  const auto& rightStreams = joinKey.rightStreams;
+  const auto& rightStream = joinKey.rightStreams;
+
+  // Ensure the left child is a join of at least two base streams
+  assert(joinKey.leftStreams.size() > 1);
 
   // Ensure the right child is a stream (not a join operator)
   assert(joinKey.rightStreams.size() == 1);
-
-  // Ensure the left child is a join of exactly two base streams
-  assert(joinKey.leftStreams.size() == 2);
 
   // Loop through the base streams in the left child
   for (const auto& stream : leftStreams) {
     // Create a new join between each stream and the right child
     std::unordered_set<std::string> newLeftStreams = {stream};
-    std::unordered_set<std::string> newRightStreams = rightStreams;
+    std::unordered_set<std::string> newRightStreams = rightStream;
 
     // Create a new JoinKey for the decomposed join pair
     JoinKey newJoinKey;
@@ -314,38 +314,40 @@ void JoinOrderer::createUpdatedWindowAssignments(
     const std::unordered_map<WindowSpecification, std::string>&
         timePropagators) {
   // Iterate over the windowAssignments (join pairs and window specs)
-  for (const auto& pair : windowAssignments) {
+  for (const auto& pair : windowAssignments) {  // AB:C_W2 und A:B_W1
     auto joinKey = pair.first;
     auto windowSpec = pair.second;
 
     auto leftChildIsAJoin = joinKey.leftStreams.size() > 1;
 
-    if (leftChildIsAJoin) {
+    if (leftChildIsAJoin) {  // Only AB:C
       // Operator has a joined pair as the left child.
-      // Decompose the join pair, e.g., ABC -> AB, BC
-      auto decomposedPairs = decomposeJoinPair(joinKey);  // AB, BC
+      // Decompose the join pair, e.g., ABC -> AC, BC
+      auto decomposedPairs = decomposeJoinPair(joinKey);  // AC, BC
 
       for (auto& decomposedPair : decomposedPairs) {
         // For each decomposedPair (joinPair) get the appropriate Window
         // Specification
         auto windowSpec = windowAssignments.at(
-            decomposedPair);  // AB: W_1, BC? nothing? // TODO: Continue here.
+            joinKey);  // Assign for the decomposed pairs the same window as for
+                       // the two-way join AB:C_W2 => AC_w2, BC_w2
+
+        assert(windowSpec.size() > 0);  // Make sure we have windowSpecs
+
         auto timePropagator = timePropagators.at(windowSpec.front());
 
         // Check the left stream's name in the decomposed pair
         const auto& leftStreamNames = decomposedPair.leftStreams;
 
-        assert(windowSpec.size() > 0);  // there is currently at least one
-                                        // windowSpec for the decomposed pair.
-
         if (leftStreamNames.find(timePropagator) != leftStreamNames.end()) {
           windowAssignments[decomposedPair].push_back(windowSpec.front());
         } else {
           // Add other window specs as needed
+          // TODO: Discuss with Ariane why we do this, couldn't we just leave
+          // that empty?
           for (const auto& [key, ws] : windowAssignments) {
             for (const auto& spec : ws) {
-              windowAssignments[decomposedPair].push_back(
-                  spec);  // TODO: Discuss with Ariane why we do this.
+              windowAssignments[decomposedPair].push_back(spec);
             }
           }
         }
@@ -353,6 +355,50 @@ void JoinOrderer::createUpdatedWindowAssignments(
     }
   }
   createCommutativePairs(windowAssignments);
+}
+
+std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
+    const std::shared_ptr<JoinPlan>& joinPlan) {
+  
+  // Get joinType
+  
+
+  // Get the base streams from the join plan root
+  std::unordered_set<std::string> baseStreams =
+      joinPlan->getRoot()->getOutputStream()->getBaseStreams();
+
+  std::vector<std::string> streamNames(baseStreams.begin(), baseStreams.end());
+
+  // Generate all permutations of the streams
+  std::vector<std::vector<std::string>> permutations;
+  generatePermutations(streamNames, permutations);
+
+  // Hold all the JoinPermutations we will generate
+  std::vector<JoinPermutation> allPermutations;
+
+  // Iterate over each permutation to create JoinPermutations
+  for (const auto& perm : permutations) {
+    JoinPermutation permutation;
+
+    // Iterate over the pairs of streams in the permutation and build the join
+    for (size_t i = 0; i < perm.size() - 1; ++i) {
+      std::string left = perm[i];
+      std::string right = perm[i + 1];
+
+      // Create a new JoinKey for this pair
+      JoinKey joinKey({left}, {right},
+                      JoinType::SLIDING_WINDOW);  // Assume sliding window for
+                                                  // now, adjust later
+
+      // Add this step to the permutation
+      permutation.addJoinStep(joinKey);
+    }
+
+    // Add the generated permutation to the list of all permutations
+    allPermutations.push_back(permutation);
+  }
+
+  return allPermutations;
 }
 
 // Clean solution for reordering.
@@ -402,10 +448,24 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 
   // Generate all possible join combinations
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
-  auto joinPermutations = generateJoinPermutations(windowAssignments);
+  auto joinPermutations = generateAllJoinPermutations(joinPlan);
+
+  // Assign Window: if success => Craft Join with windowSpecs, propagator and
+  // permutation.
 
   // We can now generate every possible join combination
   // Iterate over the window assignments, see if we have the proper keys and get
+  // We build it this way => permutation of ABC might be CAB aka. CA and then
+  // CAB. hence:
+  /*
+  𝑞𝑝𝑒𝑟𝑚𝑠 ← 𝑔𝑒𝑛𝑒𝑟𝑎𝑡𝑒𝐽𝑜𝑖𝑛𝑃𝑒𝑟𝑚𝑢𝑡𝑎𝑡𝑖𝑜𝑛𝑠(𝑞) for 𝑞𝑝𝑒𝑟𝑚 in 𝑞𝑝𝑒𝑟𝑚𝑠 do
+while𝑞𝑝𝑒𝑟𝑚.𝑔𝑒𝑡𝑁𝑒𝑥𝑡𝐽𝑜𝑖𝑛𝑃𝑎𝑖𝑟() do ⊲⊳𝑛←𝑞𝑝𝑒𝑟𝑚.𝑔𝑒𝑡𝑁𝑒𝑥𝑡𝐽𝑜𝑖𝑛𝑃𝑎𝑖𝑟()
+𝑣𝑎𝑙𝑖𝑑 ←𝑎𝑠𝑠𝑖𝑔𝑛𝑊𝑖𝑛𝑑𝑜𝑤𝑂𝑝𝑒𝑟𝑎𝑡𝑜𝑟(⊲⊳𝑛,∇𝜔) if !valid then
+break if𝑉𝑎𝑙𝑖𝑑∧!𝑞𝑝𝑒𝑟𝑚.𝑔𝑒𝑡𝑁𝑒𝑥𝑡𝐽𝑜𝑖𝑛𝑃𝑎𝑖𝑟() then
+return 𝑞𝑝𝑒𝑟𝑚
+   */
+
+  //
 
   return std::vector<std::shared_ptr<JoinPlan>>();  // TODO: Change
 }

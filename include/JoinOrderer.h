@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "JoinPermutation.h"
 #include "JoinPlan.h"
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
@@ -63,6 +64,9 @@ class JoinOrderer {
   void createCommutativePairs(
       std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
           windowAssignments);
+
+          std::vector<JoinPermutation> generateAllJoinPermutations(
+    const std::shared_ptr<JoinPlan>& joinPlan
 };
 
 #endif  // JOIN_ORDERER_H

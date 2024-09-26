@@ -24,6 +24,8 @@ class JoinPlan {
 
   std::string getTimestampPropagator() const;
 
+  JoinType getJoinType() const;
+
  private:
   std::shared_ptr<Node> root;
 };

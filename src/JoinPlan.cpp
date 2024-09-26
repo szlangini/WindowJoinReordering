@@ -73,3 +73,15 @@ std::string JoinPlan::getTimestampPropagator() const {
   }
   throw std::runtime_error("Unknown node.");
 }
+
+JoinType JoinPlan::getJoinType() const {
+  auto rootNode = this->getRoot();
+
+  if (std::dynamic_pointer_cast<SlidingWindowJoin>(rootNode)) {
+    return JoinType::SlidingWindowJoin;
+  } else if (std::dynamic_pointer_cast<IntervalJoin>(rootNode)) {
+    return JoinType::IntervalJoin;
+  } else {
+    throw std::runtime_error("Unknown join type in JoinPlan");
+  }
+}
