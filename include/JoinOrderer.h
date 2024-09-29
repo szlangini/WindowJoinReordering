@@ -19,7 +19,6 @@ class JoinOrderer {
   std::vector<std::shared_ptr<JoinPlan>> reorder(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
- private:
   void generatePermutations(
       const std::vector<std::string>& streams,
       std::vector<std::vector<std::string>>& permutations);

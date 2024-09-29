@@ -20,6 +20,7 @@ set(TEST_SOURCES
     test_swj_reordering.cpp
     test_ivj.cpp
     test_ivj_reordering.cpp
+    unit_tests_join_orderer_component.cpp
 )
 
 # Create the test executable
