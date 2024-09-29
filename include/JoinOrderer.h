@@ -29,13 +29,6 @@ class JoinOrderer {
       const std::shared_ptr<Node>& node,
       std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap);
 
-  // Skip unnecessary/invalid plans
-  bool isPruneablePlan(const std::string& firstPair,
-                       const std::shared_ptr<Node>& root,
-                       const std::vector<std::string>& perm,
-                       std::set<std::string>& seenPairs, bool isSlidingWindow);
-
-  // NEW STUFF
   std::pair<std::vector<WindowSpecification>,
             std::unordered_map<JoinKey, std::vector<WindowSpecification>>>
   getWindowSpecificationsAndAssignments(

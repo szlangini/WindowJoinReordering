@@ -69,25 +69,6 @@ void JoinOrderer::generatePermutations(
   } while (std::next_permutation(perm.begin(), perm.end()));
 }
 
-// Helper to split the join order name (e.g., "A_B_C" -> {"A", "B", "C"})
-std::vector<std::string> splitJoinOrder(const std::string& joinOrder) {
-  std::vector<std::string> streams;
-  std::stringstream ss(joinOrder);
-  std::string stream;
-  while (std::getline(ss, stream, '_')) {
-    streams.push_back(stream);
-  }
-  return streams;
-}
-
-std::string canonicalPair(const std::string& left, const std::string& right) {
-  if (left < right) {
-    return left + "_" + right;
-  } else {
-    return right + "_" + left;
-  }
-}
-
 std::pair<std::vector<WindowSpecification>,
           std::unordered_map<JoinKey, std::vector<WindowSpecification>>>
 JoinOrderer::getWindowSpecificationsAndAssignments(
@@ -467,7 +448,6 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
   // Return the final JoinPlan built from the permutation
   return std::make_shared<JoinPlan>(currentJoin);
 }
-
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   // Setup: Get WindowSpecs, Assignments, Propagators and TimeDomain
