@@ -13,42 +13,54 @@
 #include "WindowSpecification.h"
 
 enum class JoinType { SlidingWindowJoin, IntervalJoin };
+
 struct JoinKey {
   JoinType joinType;
   std::unordered_set<std::string> leftStreams;
   std::unordered_set<std::string> rightStreams;
 
+  // Default constructor
+  JoinKey() = default;
+
+  // Parameterized constructor
   JoinKey(JoinType type, const std::unordered_set<std::string>& left,
           const std::unordered_set<std::string>& right)
       : joinType(type), leftStreams(left), rightStreams(right) {}
 
+  // Equality operator
   bool operator==(const JoinKey& other) const {
     return joinType == other.joinType && leftStreams == other.leftStreams &&
            rightStreams == other.rightStreams;
   }
 };
 
-// Custom hash for JoinKey
-struct JoinKeyHash {
-  std::size_t operator()(const JoinKey& key) const {
-    std::size_t h1 =
-        std::hash<int>{}(static_cast<int>(key.joinType));  // Hash the enum
-    std::size_t h2 = 0;
-    std::size_t h3 = 0;
+// Custom hash function for JoinKey
+namespace std {
+template <>
+struct hash<JoinKey> {
+  size_t operator()(const JoinKey& key) const {
+    size_t h1 =
+        std::hash<int>()(static_cast<int>(key.joinType));  // Hash join type
+    size_t h2 = 0;
 
     // Hash the left streams
     for (const auto& stream : key.leftStreams) {
-      h2 ^= std::hash<std::string>{}(stream);
+      h2 ^=
+          std::hash<std::string>()(stream) + 0x9e3779b9 + (h2 << 6) + (h2 >> 2);
     }
+
+    size_t h3 = 0;
 
     // Hash the right streams
     for (const auto& stream : key.rightStreams) {
-      h3 ^= std::hash<std::string>{}(stream);
+      h3 ^=
+          std::hash<std::string>()(stream) + 0x9e3779b9 + (h3 << 6) + (h3 >> 2);
     }
 
-    return h1 ^ (h2 << 1) ^ (h3 << 2);  // Combine hashes
+    return h1 ^ (h2 << 1) ^ (h3 << 1);  // Combine the hashes
   }
 };
+}  // namespace std
 
 class WindowJoinOperator : public Node {
  public:
