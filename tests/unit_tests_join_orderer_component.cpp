@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "IntervalJoin.h"
 #include "JoinOrderer.h"
 #include "JoinPlan.h"
 #include "WindowJoinOperator.h"
@@ -56,6 +57,99 @@ TEST_F(JoinOrdererTest, TestDecomposeJoinPair) {
   EXPECT_EQ(decomposedPairs[2].rightStreams, expectedRight);
 }
 
+TEST_F(JoinOrdererTest, TestGatherStreamsSingleStream) {
+  // Create a mock stream
+  auto streamA = std::make_shared<Stream>("StreamA");
+
+  // Map to store the gathered streams
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+
+  // Call gatherStreams with the single stream
+  joinOrderer.gatherStreams(streamA, streamMap);
+
+  // We should have exactly one stream in the map
+  ASSERT_EQ(streamMap.size(), 1);
+  EXPECT_EQ(streamMap["StreamA"],
+            streamA);  // Check if the stream is stored by name
+}
+
+TEST_F(JoinOrdererTest, TestGatherStreamsWithSlidingWindowJoin) {
+  // Create mock streams
+  auto streamA = std::make_shared<Stream>("StreamA");
+  auto streamB = std::make_shared<Stream>("StreamB");
+
+  // Create a SlidingWindowJoin with two streams as children
+  auto slidingJoin = std::make_shared<SlidingWindowJoin>(
+      streamA, streamB, 1000, 500, TimeDomain::EVENT_TIME, "A");
+
+  // Map to store the gathered streams
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+
+  // Call gatherStreams with the sliding window join
+  joinOrderer.gatherStreams(slidingJoin, streamMap);
+
+  // We should have exactly two streams in the map
+  ASSERT_EQ(streamMap.size(), 2);
+  EXPECT_EQ(streamMap["StreamA"],
+            streamA);  // Check if StreamA is stored correctly
+  EXPECT_EQ(streamMap["StreamB"],
+            streamB);  // Check if StreamB is stored correctly
+}
+
+TEST_F(JoinOrdererTest, TestGatherStreamsWithIntervalJoin) {
+  // Create mock streams
+  auto streamA = std::make_shared<Stream>("StreamA");
+  auto streamC = std::make_shared<Stream>("StreamC");
+
+  // Create an IntervalJoin with two streams as children
+  auto intervalJoin =
+      std::make_shared<IntervalJoin>(streamA, streamC, -500, 500, "C");
+
+  // Map to store the gathered streams
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+
+  // Call gatherStreams with the interval join
+  joinOrderer.gatherStreams(intervalJoin, streamMap);
+
+  // We should have exactly two streams in the map
+  ASSERT_EQ(streamMap.size(), 2);
+  EXPECT_EQ(streamMap["StreamA"],
+            streamA);  // Check if StreamA is stored correctly
+  EXPECT_EQ(streamMap["StreamC"],
+            streamC);  // Check if StreamC is stored correctly
+}
+
+TEST_F(JoinOrdererTest, TestGatherStreamsWithNestedJoins) {
+  // Create mock streams
+  auto streamA = std::make_shared<Stream>("StreamA");
+  auto streamB = std::make_shared<Stream>("StreamB");
+  auto streamC = std::make_shared<Stream>("StreamC");
+
+  // Create an IntervalJoin with streamA and streamB
+  auto intervalJoin =
+      std::make_shared<IntervalJoin>(streamA, streamB, -500, 500, "B");
+
+  // Create a SlidingWindowJoin with intervalJoin and streamC
+  auto slidingJoin = std::make_shared<SlidingWindowJoin>(
+      intervalJoin, streamC, 1000, 500, TimeDomain::EVENT_TIME, "C");
+
+  // Map to store the gathered streams
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+
+  // Call gatherStreams with the sliding window join (nested join tree)
+  joinOrderer.gatherStreams(slidingJoin, streamMap);
+
+  // We should have exactly three streams in the map
+  ASSERT_EQ(streamMap.size(), 3);
+  EXPECT_EQ(streamMap["StreamA"],
+            streamA);  // Check if StreamA is stored correctly
+  EXPECT_EQ(streamMap["StreamB"],
+            streamB);  // Check if StreamB is stored correctly
+  EXPECT_EQ(streamMap["StreamC"],
+            streamC);  // Check if StreamC is stored correctly
+}
+
+// Needs more thought.
 TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
   // Mock window assignments (before update)
   std::unordered_map<JoinKey, std::vector<WindowSpecification>>

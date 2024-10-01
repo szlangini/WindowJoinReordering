@@ -123,6 +123,10 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
       currentNode = intervalJoin->getLeftChild();  // Move to the left child
 
     } else {
+      if (std::dynamic_pointer_cast<Stream>(currentNode)) {
+        break;  // if left child was merely a Stream.
+      }
+
       throw std::runtime_error(
           "Current node is not a WindowJoinOperator, cannot retrieve Window "
           "Specifications");
@@ -502,3 +506,5 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
 
   return validJoinPlans;
 }
+
+// FOR ABC in ET Case e.g., A
