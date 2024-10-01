@@ -5,14 +5,31 @@
 #include "IntervalJoin.h"
 #include "JoinOrderer.h"
 #include "JoinPlan.h"
+#include "Utils.h"
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
 class JoinOrdererTest : public ::testing::Test {
  protected:
-  void SetUp() override {}
+  void SetUp() override {
+    auto A = createStream("A", 100, linearValueDistribution, 100, 1);
+    auto B = createStream("B", 100, linearValueDistribution, 200, 2);
+    auto C = createStream("C", 200, linearValueDistribution, 100, 3);
+
+    long length = 10;
+    long slide = 10;
+
+    auto joinAB = std::make_shared<SlidingWindowJoin>(
+        A, B, length, slide, TimeDomain::EVENT_TIME, "A");
+    auto joinABC = std::make_shared<SlidingWindowJoin>(
+        joinAB, C, length, slide, TimeDomain::EVENT_TIME,
+        joinAB->getTimestampPropagator());
+
+    testJoinPlan = std::make_shared<JoinPlan>(joinABC);
+  }
 
   JoinOrderer joinOrderer;
+  std::shared_ptr<JoinPlan> testJoinPlan;
 };
 
 TEST_F(JoinOrdererTest, TestGeneratePermutations) {
@@ -149,14 +166,55 @@ TEST_F(JoinOrdererTest, TestGatherStreamsWithNestedJoins) {
             streamC);  // Check if StreamC is stored correctly
 }
 
+TEST_F(JoinOrdererTest, TestGenerateAllJoinPermutations) {
+  // Generate all join permutations based on the testJoinPlan
+  auto joinPermutations = joinOrderer.generateAllJoinPermutations(testJoinPlan);
+
+  // Check that the correct number of permutations is generated
+  // For 3 streams, we expect 2 permutations:
+  // (A:B then AB:C), (B:A then BA:C), etc.
+  EXPECT_EQ(joinPermutations.size(), 6);  // 3! = 6 permutations for 3 streams
+
+  // Verify the content of the first permutation
+  // Expected order: A:B and then AB:C
+  auto perm1 = joinPermutations[0];
+  ASSERT_EQ(perm1.getSteps().size(), 2);  // Two steps for this permutation
+
+  // First step: A:B
+  JoinKey step1Key = perm1.getSteps()[0];
+  EXPECT_EQ(step1Key.leftStreams, std::unordered_set<std::string>{"A"});
+  EXPECT_EQ(step1Key.rightStreams, std::unordered_set<std::string>{"B"});
+  EXPECT_EQ(step1Key.joinType, JoinType::SlidingWindowJoin);
+
+  // Second step: AB:C
+  JoinKey step2Key = perm1.getSteps()[1];
+  EXPECT_EQ(step2Key.leftStreams, std::unordered_set<std::string>{"A", "B"});
+  EXPECT_EQ(step2Key.rightStreams, std::unordered_set<std::string>{"C"});
+  EXPECT_EQ(step2Key.joinType, JoinType::SlidingWindowJoin);
+
+  // Verify another permutation, such as BAC
+  auto perm2 = joinPermutations[1];
+  ASSERT_EQ(perm2.getSteps().size(), 2);  // Two steps for this permutation
+
+  // First step: B:A
+  JoinKey step1Key_perm2 = perm2.getSteps()[0];
+  EXPECT_EQ(step1Key_perm2.leftStreams, std::unordered_set<std::string>{"B"});
+  EXPECT_EQ(step1Key_perm2.rightStreams, std::unordered_set<std::string>{"A"});
+  EXPECT_EQ(step1Key_perm2.joinType, JoinType::SlidingWindowJoin);
+
+  // Second step: BA:C
+  JoinKey step2Key_perm2 = perm2.getSteps()[1];
+  EXPECT_EQ(step2Key_perm2.leftStreams,
+            std::unordered_set<std::string>{"B", "A"});
+  EXPECT_EQ(step2Key_perm2.rightStreams, std::unordered_set<std::string>{"C"});
+  EXPECT_EQ(step2Key_perm2.joinType, JoinType::SlidingWindowJoin);
+}
+
 // Needs more thought.
 TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
   // Mock window assignments (before update)
   std::unordered_map<JoinKey, std::vector<WindowSpecification>>
       windowAssignments;
-
-  // Mock time propagators
-  std::unordered_map<WindowSpecification, std::string> timePropagators;
 
   // Create JoinKey for a SlidingWindowJoin
   std::unordered_set<std::string> leftStreams = {"A", "B"};
@@ -166,15 +224,11 @@ TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
 
   // Create WindowSpecification and assign it
   WindowSpecification slidingWindowSpec =
-      WindowSpecification::createSlidingWindowSpecification(1000, 500);
+      WindowSpecification::createSlidingWindowSpecification(1000, 500, "A");
   windowAssignments[slidingJoinKey] = {slidingWindowSpec};
 
-  // Add time propagator for this spec
-  timePropagators[slidingWindowSpec] = "A";  // Stream "A" is propagating time
-
   // Call the function to update window assignments
-  joinOrderer.createUpdatedWindowAssignments(windowAssignments,
-                                             timePropagators);
+  joinOrderer.deriveAllWindowPermutations(windowAssignments);
 
   // Expect that the window assignments are updated correctly
   auto updatedWindowSpecs = windowAssignments[slidingJoinKey];
@@ -185,6 +239,7 @@ TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
   EXPECT_EQ(updatedWindowSpecs[0].slide, 500);
 
   // Verify that the correct time propagator is assigned
-  std::string timePropagator = timePropagators.at(slidingWindowSpec);
-  EXPECT_EQ(timePropagator, "A");
+  for (auto windowSpec : updatedWindowSpecs) {
+    EXPECT_EQ(windowSpec.timestampPropagator, "A");
+  }
 }

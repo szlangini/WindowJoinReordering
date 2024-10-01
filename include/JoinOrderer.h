@@ -15,7 +15,7 @@
 
 class JoinOrderer {
  public:
-  // Reorders the join plan and returns a vector of new JoinPlans
+  // Reorders the join plan and returns a vector of JoinPlan (Algorithm 2)
   std::vector<std::shared_ptr<JoinPlan>> reorder(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
@@ -33,23 +33,16 @@ class JoinOrderer {
   getWindowSpecificationsAndAssignments(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
-  // Maps each WindowSpecification to the timestamp propagator.
-  std::unordered_map<WindowSpecification, std::string> getTimestampPropagators(
-      const std::shared_ptr<JoinPlan>& joinPlan,
-      const std::vector<WindowSpecification>& windowSpecs);
-
   // returns all permutations there are without considering if they are
   // legal. This is in PT, hence only for Sliding Window Joins.
   std::vector<std::shared_ptr<JoinPlan>> getAllSlidingWindowJoinPermutations(
       const std::shared_ptr<JoinPlan>& joinPlan,
       const WindowSpecification generalWindowSpec);
 
-  // Function to create updated window assignments for EVENT_TIME
-  void createUpdatedWindowAssignments(
+  // For EVENT_TIME only, derives all possible Window Permutations (Algorithm 1)
+  void deriveAllWindowPermutations(
       std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
-          windowAssignments,
-      const std::unordered_map<WindowSpecification, std::string>&
-          timePropagators);
+          windowAssignments);
 
   std::vector<JoinKey> decomposeJoinPair(const JoinKey& joinKey);
 
@@ -64,9 +57,8 @@ class JoinOrderer {
       const JoinPermutation& permutation,
       const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
           windowAssignments,
-      const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap,
-      const std::unordered_map<WindowSpecification, std::string>&
-          timestampPropagators);
+      const std::unordered_map<std::string, std::shared_ptr<Stream>>&
+          streamMap);
 };
 
 #endif  // JOIN_ORDERER_H

@@ -88,7 +88,8 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
       // Create a Sliding Window Specification
       WindowSpecification slidingSpec =
           WindowSpecification::createSlidingWindowSpecification(
-              slidingJoin->getLength(), slidingJoin->getSlide());
+              slidingJoin->getLength(), slidingJoin->getSlide(),
+              slidingJoin->getTimestampPropagator());
       windowSpecs.emplace_back(slidingSpec);  // Add to the list of specs
 
       // Fill Join Key
@@ -108,7 +109,8 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
       // Create an Interval Window Specification
       WindowSpecification intervalSpec =
           WindowSpecification::createIntervalWindowSpecification(
-              intervalJoin->getLowerBound(), intervalJoin->getUpperBound());
+              intervalJoin->getLowerBound(), intervalJoin->getUpperBound(),
+              intervalJoin->getTimestampPropagator());
       windowSpecs.emplace_back(intervalSpec);  // Add to the list of specs
 
       // Fill Join Key
@@ -137,48 +139,6 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
   std::reverse(windowSpecs.begin(), windowSpecs.end());
 
   return {windowSpecs, windowAssignments};
-}
-
-// Function to return a map from WindowSpecification to time propagator
-std::unordered_map<WindowSpecification, std::string>
-JoinOrderer::getTimestampPropagators(
-    const std::shared_ptr<JoinPlan>& joinPlan,
-    const std::vector<WindowSpecification>& windowSpecs) {
-  std::vector<std::string> timestampPropagators;
-  std::unordered_map<WindowSpecification, std::string> timePropagatorMap;
-  auto currentNode = joinPlan->getRoot();
-
-  // Step 1: Traverse the join tree in a left-deep manner and collect timestamp
-  // propagators
-  while (currentNode) {
-    if (auto slidingJoin =
-            std::dynamic_pointer_cast<SlidingWindowJoin>(currentNode)) {
-      timestampPropagators.push_back(slidingJoin->getTimestampPropagator());
-      currentNode = slidingJoin->getLeftChild();  // Move to the left child
-    } else if (auto intervalJoin =
-                   std::dynamic_pointer_cast<IntervalJoin>(currentNode)) {
-      timestampPropagators.push_back(intervalJoin->getTimestampPropagator());
-      currentNode = intervalJoin->getLeftChild();  // Move to the left child
-    } else {
-      throw std::runtime_error("Unknown node type encountered in join tree");
-    }
-  }
-
-  // Step 2: Reverse the timestampPropagators vector to align with the
-  // windowSpecs order
-  std::reverse(timestampPropagators.begin(), timestampPropagators.end());
-
-  // Step 3: Create a map of WindowSpecification to timestamp propagator
-  if (timestampPropagators.size() != windowSpecs.size()) {
-    throw std::runtime_error(
-        "Mismatch between window specifications and timestamp propagators.");
-  }
-
-  for (size_t i = 0; i < windowSpecs.size(); ++i) {
-    timePropagatorMap[windowSpecs[i]] = timestampPropagators[i];
-  }
-
-  return timePropagatorMap;
 }
 
 std::vector<std::shared_ptr<JoinPlan>>
@@ -293,40 +253,37 @@ void JoinOrderer::createCommutativePairs(
   windowAssignments.insert(newAssignments.begin(), newAssignments.end());
 }
 
-// Input are AB:C with Window 2 and A:B with Window 1
-void JoinOrderer::createUpdatedWindowAssignments(
+// Input are AB:C_w2 and A:B_w1
+void JoinOrderer::deriveAllWindowPermutations(
     std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
-        windowAssignments,
-    const std::unordered_map<WindowSpecification, std::string>&
-        timePropagators) {
+        windowAssignments) {
   // Iterate over the windowAssignments (join pairs and window specs)
   for (const auto& pair : windowAssignments) {  // AB:C_W2 und A:B_W1
     auto joinKey = pair.first;
-    auto windowSpec = pair.second;
+    auto windowSpecs = pair.second;
 
     auto leftChildIsAJoin = joinKey.leftStreams.size() > 1;
 
-    if (leftChildIsAJoin) {  // Only AB:C
-      // Operator has a joined pair as the left child.
+    if (leftChildIsAJoin) {
       // Decompose the join pair, e.g., ABC -> AC, BC
-      auto decomposedPairs = decomposeJoinPair(joinKey);  // AC, BC
+      auto decomposedPairs =
+          decomposeJoinPair(joinKey);  // AC, BC // Tested successfully.
 
       for (auto& decomposedPair : decomposedPairs) {
         // For each decomposedPair (joinPair) get the appropriate Window
         // Specification
-        auto windowSpec = windowAssignments.at(
-            joinKey);  // Assign for the decomposed pairs the same window as for
-                       // the two-way join AB:C_W2 => AC_w2, BC_w2
+        auto windowSpecs = windowAssignments.at(joinKey);  // this gets us w2
+        assert(windowSpecs.size() ==
+               1);  // Make sure we have exactly one window spec.
 
-        assert(windowSpec.size() > 0);  // Make sure we have windowSpecs
-
-        auto timePropagator = timePropagators.at(windowSpec.front());
+        auto timePropagator = windowSpecs.front().timestampPropagator;
 
         // Check the left stream's name in the decomposed pair
         const auto& leftStreamNames = decomposedPair.leftStreams;
 
         if (leftStreamNames.find(timePropagator) != leftStreamNames.end()) {
-          windowAssignments[decomposedPair].push_back(windowSpec.front());
+          windowAssignments[decomposedPair].push_back(
+              windowSpecs.front());  // AC_w2 added to window assignments.
         } else {
           // Add other window specs as needed
           // TODO: Discuss with Ariane why we do this, couldn't we just leave
@@ -342,6 +299,51 @@ void JoinOrderer::createUpdatedWindowAssignments(
   }
   createCommutativePairs(windowAssignments);
 }
+
+// TODO: Change this, should have all the history. A:B and then AB:C
+// std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
+//     const std::shared_ptr<JoinPlan>& joinPlan) {
+//   // Get joinType
+//   auto joinType = joinPlan->getJoinType();
+
+//   // Get the base streams from the join plan root
+//   std::unordered_set<std::string> baseStreams =
+//       joinPlan->getRoot()->getOutputStream()->getBaseStreams();
+
+//   std::vector<std::string> streamNames(baseStreams.begin(),
+//   baseStreams.end());
+
+//   // Generate all permutations of the streams
+//   std::vector<std::vector<std::string>> permutations;
+//   generatePermutations(streamNames, permutations);
+
+//   // Hold all the JoinPermutations we will generate
+//   std::vector<JoinPermutation> allPermutations;
+
+//   // Iterate over each permutation to create JoinPermutations
+//   for (const auto& perm : permutations) {
+//     JoinPermutation permutation;
+
+//     // Iterate over the pairs of streams in the permutation and build the
+//     join for (size_t i = 0; i < perm.size() - 1; ++i) {
+//       std::string left = perm[i];
+//       std::string right = perm[i + 1];
+
+//       // Create a new JoinKey for this pair
+//       JoinKey joinKey(joinType, {left},
+//                       {right});  // ABC will become: AB and BC keys. BAC will
+//                                  // become: BA and AC...
+
+//       // Add this step to the permutation
+//       permutation.addJoinStep(joinKey);
+//     }
+
+//     // Add the generated permutation to the list of all permutations
+//     allPermutations.push_back(permutation);
+//   }
+
+//   return allPermutations;
+// }
 
 std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
     const std::shared_ptr<JoinPlan>& joinPlan) {
@@ -365,18 +367,28 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
   for (const auto& perm : permutations) {
     JoinPermutation permutation;
 
-    // Iterate over the pairs of streams in the permutation and build the join
-    for (size_t i = 0; i < perm.size() - 1; ++i) {
-      std::string left = perm[i];
-      std::string right = perm[i + 1];
+    // Start with an empty set for the left side of the join
+    std::unordered_set<std::string> leftSet;
+    std::string right;
 
-      // Create a new JoinKey for this pair
-      JoinKey joinKey(joinType, {left},
-                      {right});  // ABC will become: AB and BC keys. BAC will
-                                 // become: BA and AC...
+    // Iterate over the streams in the permutation
+    for (size_t i = 0; i < perm.size(); ++i) {
+      right = perm[i];
 
-      // Add this step to the permutation
+      // Skip the first stream in the permutation, because we need at least two
+      // streams to form a join
+      if (leftSet.empty()) {
+        leftSet.insert(right);
+        continue;
+      }
+
+      // Create a new JoinKey for this pair of leftSet (which accumulates
+      // streams) and the current right stream
+      JoinKey joinKey(joinType, leftSet, {right});
       permutation.addJoinStep(joinKey);
+
+      // Add the right stream to the leftSet for the next join
+      leftSet.insert(right);
     }
 
     // Add the generated permutation to the list of all permutations
@@ -390,9 +402,7 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
     const JoinPermutation& permutation,
     const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
         windowAssignments,
-    const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap,
-    const std::unordered_map<WindowSpecification, std::string>&
-        timestampPropagators) {
+    const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
   std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
 
   // Iterate over the steps in the permutation
@@ -404,9 +414,10 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
     if (windowSpecs.size() != 1) {
       return nullptr;  // Invalid case, we should always expect one spec per
                        // join step
-    }
+    }  // TODO: Maybe needs adjustment for CASE A4 where multiple window specs
+       // actually semnatically mean something.
     const auto& windowSpec = windowSpecs.front();
-    auto timestampPropagator = timestampPropagators.at(windowSpec);
+    auto timestampPropagator = windowSpec.timestampPropagator;
 
     // Ensure the left and right streams in the join key are present in the
     // stream map
@@ -457,38 +468,41 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   // Setup: Get WindowSpecs, Assignments, Propagators and TimeDomain
   auto [windowSpecs, windowAssignments] =
       getWindowSpecificationsAndAssignments(joinPlan);
-
-  auto timeDomain = joinPlan->getTimeDomain();
-
-  auto timestampPropagators = getTimestampPropagators(joinPlan, windowSpecs);
-
   std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
   gatherStreams(joinPlan->getRoot(), streamMap);
 
   // Early return if there is a problem retrieving the values.
-  if (windowSpecs.empty() || windowAssignments.empty() ||
-      timestampPropagators.empty()) {
+  if (windowSpecs.empty() || windowAssignments.empty()) {
     throw std::runtime_error(
         "Error: One or more required fields are not properly filled.");
   }
 
+  auto timeDomain = joinPlan->getTimeDomain();
   if (timeDomain == TimeDomain::PROCESSING_TIME) {
-    auto isCaseA4 = false;  // LWO needs sync with Ariane :)
-    if (isCaseA4) {
+    bool hasWindowWithSlideGEQLength = checkSlideLengthRatio(
+        windowSpecs);  // Checks for all windowSpecs if there is one with s >= l
+
+    if (hasWindowWithSlideGEQLength) {
+      // A2, A4
+
     } else {
-      return getAllSlidingWindowJoinPermutations(
-          joinPlan,
-          windowSpecs[0]);  // WindowSpecs are all equal -> We can do
-                            // what we want. All orders are allowed in
-                            // A2 PT. We want to return them all!
+      // A1, A3
+      createCommutativePairs(windowAssignments);
+      return windowAssignments;
     }
+
+    // if s >= l
+    //  checkAndApplyLWO // A2, A4
+    // else
+    //  return commutativePairs(joinPlan) // A1, A3
+    getAllSlidingWindowJoinPermutations(joinPlan, windowSpecs[0]);
   } else {
     // TimeDomain::EVENT_TIME
 
     // ABC_w2 -> AC_w2, BC_w2 -- Timestamp filter => AC_W2. Finally we have
     // AB_w1 AC_w2 with their commutations. That we can reorder to:
     // (ABC, BAC, CAB, ACB, [but not BCA or CBA])
-    createUpdatedWindowAssignments(windowAssignments, timestampPropagators);
+    deriveAllWindowPermutations(windowAssignments);
   }
 
   // Generate all possible join combinations
@@ -497,13 +511,12 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       joinPlan);  // Permutation looks like AB, BC or BA, AC
 
   for (const auto& perm : joinPermutations) {
-    std::shared_ptr<JoinPlan> newPlan = buildJoinPlanFromPermutation(
-        perm, windowAssignments, streamMap, timestampPropagators);
+    std::shared_ptr<JoinPlan> newPlan =
+        buildJoinPlanFromPermutation(perm, windowAssignments, streamMap);
     if (newPlan) {  // might be nullptr!
       validJoinPlans.push_back(newPlan);
     }
   }
-
   return validJoinPlans;
 }
 

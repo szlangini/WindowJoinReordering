@@ -3,6 +3,7 @@
 #define WINDOWSPECIFICATION_H
 
 #include <functional>
+#include <string>
 struct WindowSpecification {
   enum class WindowType { SLIDING_WINDOW, INTERVAL_WINDOW, DEFAULT_WINDOW };
 
@@ -11,39 +12,49 @@ struct WindowSpecification {
   long slide;       // Used in SlidingWindowJoin
   long lowerBound;  // Used in IntervalJoin
   long upperBound;  // Used in IntervalJoin
+  std::string timestampPropagator = "";
+  // Todo: TimePropagator
 
   WindowSpecification()
       : type(WindowType::DEFAULT_WINDOW),
         length(0),
         slide(0),
         lowerBound(0),
-        upperBound(0) {}
+        upperBound(0),
+        timestampPropagator("NONE") {}
 
  private:
   // Private constructor to enforce the use of factory methods
-  WindowSpecification(WindowType t, long len, long sli, long lb, long ub)
-      : type(t), length(len), slide(sli), lowerBound(lb), upperBound(ub) {}
+  WindowSpecification(WindowType t, long len, long sli, long lb, long ub,
+                      std::string timestampPropagator)
+      : type(t),
+        length(len),
+        slide(sli),
+        lowerBound(lb),
+        upperBound(ub),
+        timestampPropagator(timestampPropagator) {}
 
  public:
   // Factory method for Sliding Window
-  static WindowSpecification createSlidingWindowSpecification(long len,
-                                                              long sli) {
-    return WindowSpecification(WindowType::SLIDING_WINDOW, len, sli, 0, 0);
+  static WindowSpecification createSlidingWindowSpecification(
+      long len, long sli, std::string timestampPropagator) {
+    return WindowSpecification(WindowType::SLIDING_WINDOW, len, sli, 0, 0,
+                               timestampPropagator);
   }
 
   // Factory method for Interval Window
-  static WindowSpecification createIntervalWindowSpecification(long lb,
-                                                               long ub) {
-    return WindowSpecification(WindowType::INTERVAL_WINDOW, 0, 0, lb, ub);
+  static WindowSpecification createIntervalWindowSpecification(
+      long lb, long ub, std::string timestampPropagator) {
+    return WindowSpecification(WindowType::INTERVAL_WINDOW, 0, 0, lb, ub,
+                               timestampPropagator);
   }
 
   bool operator==(const WindowSpecification& other) const {
     return type == other.type && length == other.length &&
            slide == other.slide && lowerBound == other.lowerBound &&
-           upperBound == other.upperBound;
+           upperBound == other.upperBound &&
+           timestampPropagator == other.timestampPropagator;
   }
-
-  // auto slidingSpec = WindowSpecification::createSlidingWindow(1000,500);
 };
 
 // Hash function for WindowSpecification
@@ -57,10 +68,12 @@ struct hash<WindowSpecification> {
     std::size_t h3 = std::hash<long>{}(ws.slide);
     std::size_t h4 = std::hash<long>{}(ws.lowerBound);
     std::size_t h5 = std::hash<long>{}(ws.upperBound);
+    std::size_t h6 = std::hash<std::string>{}(ws.timestampPropagator);
 
     // Combine all hash values (you can use other hash combination algorithms)
-    return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4);
+    return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4) ^ (h6 << 5);
   }
 };
 }  // namespace std
+
 #endif  // WINDOWSPECIFICATION_H

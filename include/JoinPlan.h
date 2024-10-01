@@ -11,6 +11,8 @@ class JoinPlan {
  public:
   JoinPlan(const std::shared_ptr<Node>& root);
 
+  JoinPlan(){};  // For testing only.
+
   // Calls compute on the root node
   std::shared_ptr<Stream> compute();
 
