@@ -583,9 +583,10 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       // A2, A4
       auto isAllSameWindow = checkEqualWindows(windowSpecs);
       if (isAllSameWindow) {
-        return getAllSlidingWindowJoinPlans(joinPlan, windowSpecs[0]);
+        return getAllSlidingWindowJoinPlans(joinPlan, windowSpecs[0]);  // A2
       } else {
-        throw std::runtime_error("A4 not supported yet, s >= l, w_n != w_m");
+        throw std::runtime_error(
+            "A4 not supported yet, s >= l, w_n != w_m");  // A4
         // Check and Apply LWO
       }
     } else {
