@@ -35,7 +35,7 @@ class JoinOrderer {
 
   // returns all permutations there are without considering if they are
   // legal. This is in PT, hence only for Sliding Window Joins.
-  std::vector<std::shared_ptr<JoinPlan>> getAllSlidingWindowJoinPermutations(
+  std::vector<std::shared_ptr<JoinPlan>> getAllSlidingWindowJoinPlans(
       const std::shared_ptr<JoinPlan>& joinPlan,
       const WindowSpecification generalWindowSpec);
 
@@ -59,6 +59,14 @@ class JoinOrderer {
           windowAssignments,
       const std::unordered_map<std::string, std::shared_ptr<Stream>>&
           streamMap);
+
+  bool checkSlideLengthRatio(
+      const std::vector<WindowSpecification>& windowSpecs);
+
+  bool checkEqualWindows(const std::vector<WindowSpecification>& windowSpecs);
+
+  std::vector<std::shared_ptr<JoinPlan>> generateCommutativeJoinPlans(
+      const std::shared_ptr<JoinPlan>& joinPlan);
 };
 
 #endif  // JOIN_ORDERER_H

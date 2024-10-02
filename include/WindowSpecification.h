@@ -68,10 +68,11 @@ struct hash<WindowSpecification> {
     std::size_t h3 = std::hash<long>{}(ws.slide);
     std::size_t h4 = std::hash<long>{}(ws.lowerBound);
     std::size_t h5 = std::hash<long>{}(ws.upperBound);
-    std::size_t h6 = std::hash<std::string>{}(ws.timestampPropagator);
+    // std::size_t h6 = std::hash<std::string>{}(ws.timestampPropagator); //
+    // TODO: What todo if timestamps are different?
 
     // Combine all hash values (you can use other hash combination algorithms)
-    return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4) ^ (h6 << 5);
+    return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3) ^ (h5 << 4);  //^ (h6 << 5);
   }
 };
 }  // namespace std

@@ -182,32 +182,234 @@ TEST_F(JoinOrdererTest, TestGenerateAllJoinPermutations) {
 
   // First step: A:B
   JoinKey step1Key = perm1.getSteps()[0];
-  EXPECT_EQ(step1Key.leftStreams, std::unordered_set<std::string>{"A"});
-  EXPECT_EQ(step1Key.rightStreams, std::unordered_set<std::string>{"B"});
+  EXPECT_EQ(step1Key.leftStreams, (std::unordered_set<std::string>{"A"}));
+  EXPECT_EQ(step1Key.rightStreams, (std::unordered_set<std::string>{"B"}));
   EXPECT_EQ(step1Key.joinType, JoinType::SlidingWindowJoin);
 
   // Second step: AB:C
   JoinKey step2Key = perm1.getSteps()[1];
-  EXPECT_EQ(step2Key.leftStreams, std::unordered_set<std::string>{"A", "B"});
-  EXPECT_EQ(step2Key.rightStreams, std::unordered_set<std::string>{"C"});
+  EXPECT_EQ(step2Key.leftStreams, (std::unordered_set<std::string>{"A", "B"}));
+  EXPECT_EQ(step2Key.rightStreams, (std::unordered_set<std::string>{"C"}));
   EXPECT_EQ(step2Key.joinType, JoinType::SlidingWindowJoin);
 
-  // Verify another permutation, such as BAC
+  // Verify another permutation, such as ACB
   auto perm2 = joinPermutations[1];
   ASSERT_EQ(perm2.getSteps().size(), 2);  // Two steps for this permutation
 
-  // First step: B:A
+  // First step: A:C
   JoinKey step1Key_perm2 = perm2.getSteps()[0];
-  EXPECT_EQ(step1Key_perm2.leftStreams, std::unordered_set<std::string>{"B"});
-  EXPECT_EQ(step1Key_perm2.rightStreams, std::unordered_set<std::string>{"A"});
+  EXPECT_EQ(step1Key_perm2.leftStreams, (std::unordered_set<std::string>{"A"}));
+  EXPECT_EQ(step1Key_perm2.rightStreams,
+            (std::unordered_set<std::string>{"C"}));
   EXPECT_EQ(step1Key_perm2.joinType, JoinType::SlidingWindowJoin);
 
-  // Second step: BA:C
+  // Second step: AC:B
   JoinKey step2Key_perm2 = perm2.getSteps()[1];
   EXPECT_EQ(step2Key_perm2.leftStreams,
-            std::unordered_set<std::string>{"B", "A"});
-  EXPECT_EQ(step2Key_perm2.rightStreams, std::unordered_set<std::string>{"C"});
+            (std::unordered_set<std::string>{"C", "A"}));
+  EXPECT_EQ(step2Key_perm2.rightStreams,
+            (std::unordered_set<std::string>{"B"}));
   EXPECT_EQ(step2Key_perm2.joinType, JoinType::SlidingWindowJoin);
+}
+
+TEST_F(JoinOrdererTest, TestGenerateCommutativeJoinPlans) {
+  // Generate commutative join plans from the testJoinPlan
+  auto commutativePlans =
+      joinOrderer.generateCommutativeJoinPlans(testJoinPlan);
+
+  // Check that the correct number of commutative join plans is generated
+  // We expect 4 commutative plans: C:AB, AB:C, C:BA, BA:C
+  EXPECT_EQ(commutativePlans.size(), 4);
+
+  // Verify the content of the first commutative plan
+  // Expected order: AB:C (Original order)
+  auto commutativePlan1 = commutativePlans[0];
+  auto root1 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(commutativePlan1->getRoot());
+
+  ASSERT_TRUE(root1 != nullptr);  // Ensure that the root is a join node
+  auto left1 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root1->getLeftChild());
+  auto right1 = std::dynamic_pointer_cast<Stream>(root1->getRightChild());
+
+  ASSERT_TRUE(left1 != nullptr);   // Ensure left child is a join (AB)
+  ASSERT_TRUE(right1 != nullptr);  // Ensure right child is a stream (C)
+
+  EXPECT_EQ(left1->getLeftChild()->getName(), "A");
+  EXPECT_EQ(left1->getRightChild()->getName(), "B");
+  EXPECT_EQ(right1->getName(), "C");
+
+  // Verify the content of the second commutative plan
+  // Expected order: C:AB (Commutative order)
+  auto commutativePlan2 = commutativePlans[1];
+  auto root2 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(commutativePlan2->getRoot());
+
+  ASSERT_TRUE(root2 != nullptr);  // Ensure that the root is a join node
+  auto left2 = std::dynamic_pointer_cast<Stream>(root2->getLeftChild());
+  auto right2 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root2->getRightChild());
+
+  ASSERT_TRUE(left2 != nullptr);   // Ensure left child is a stream (C)
+  ASSERT_TRUE(right2 != nullptr);  // Ensure right child is a join (AB)
+
+  EXPECT_EQ(left2->getName(), "C");
+  EXPECT_EQ(right2->getLeftChild()->getName(), "A");
+  EXPECT_EQ(right2->getRightChild()->getName(), "B");
+
+  // Verify the content of the third commutative plan
+  // Expected order: BA:C
+  auto commutativePlan3 = commutativePlans[2];
+  auto root3 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(commutativePlan3->getRoot());
+
+  ASSERT_TRUE(root3 != nullptr);  // Ensure that the root is a join node
+  auto left3 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root3->getLeftChild());
+  auto right3 = std::dynamic_pointer_cast<Stream>(root3->getRightChild());
+
+  ASSERT_TRUE(left3 != nullptr);   // Ensure left child is a join (BA)
+  ASSERT_TRUE(right3 != nullptr);  // Ensure right child is a stream (C)
+
+  EXPECT_EQ(left3->getLeftChild()->getName(), "B");
+  EXPECT_EQ(left3->getRightChild()->getName(), "A");
+  EXPECT_EQ(right3->getName(), "C");
+
+  // Verify the content of the fourth commutative plan
+  // Expected order: C:BA
+  auto commutativePlan4 = commutativePlans[3];
+  auto root4 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(commutativePlan4->getRoot());
+
+  ASSERT_TRUE(root4 != nullptr);  // Ensure that the root is a join node
+  auto left4 = std::dynamic_pointer_cast<Stream>(root4->getLeftChild());
+  auto right4 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root4->getRightChild());
+
+  ASSERT_TRUE(left4 != nullptr);   // Ensure left child is a stream (C)
+  ASSERT_TRUE(right4 != nullptr);  // Ensure right child is a join (BA)
+
+  EXPECT_EQ(left4->getName(), "C");
+  EXPECT_EQ(right4->getLeftChild()->getName(), "B");
+  EXPECT_EQ(right4->getRightChild()->getName(), "A");
+}
+
+TEST_F(JoinOrdererTest, TestGetAllSlidingWindowJoinPlans) {
+  // Define a general window specification for the test (Tumbling window with
+  // equal lengths)
+  WindowSpecification generalWindowSpec =
+      WindowSpecification::createSlidingWindowSpecification(10, 10, "NONE");
+
+  // Generate all sliding window join plans based on the testJoinPlan and
+  // general window specification
+  auto joinPlans =
+      joinOrderer.getAllSlidingWindowJoinPlans(testJoinPlan, generalWindowSpec);
+
+  // Check that the correct number of permutations is generated
+  // For 3 streams, we expect 6 permutations: 3! = 6 permutations for 3 streams
+  EXPECT_EQ(joinPlans.size(), 6);
+
+  // Verify the content of the first join plan (A:B:C)
+  auto joinPlan1 = joinPlans[0];
+  auto root1 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan1->getRoot());
+
+  ASSERT_TRUE(root1 != nullptr);  // Ensure that the root is a join node
+  auto left1 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root1->getLeftChild());
+  auto right1 = std::dynamic_pointer_cast<Stream>(root1->getRightChild());
+
+  ASSERT_TRUE(left1 != nullptr);   // Ensure left child is a join (A:B)
+  ASSERT_TRUE(right1 != nullptr);  // Ensure right child is a stream (C)
+
+  EXPECT_EQ(left1->getLeftChild()->getName(), "A");
+  EXPECT_EQ(left1->getRightChild()->getName(), "B");
+  EXPECT_EQ(right1->getName(), "C");
+
+  // Verify the content of the second join plan (A:C:B)
+  auto joinPlan2 = joinPlans[1];
+  auto root2 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan2->getRoot());
+
+  ASSERT_TRUE(root2 != nullptr);  // Ensure that the root is a join node
+  auto left2 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root2->getLeftChild());
+  auto right2 = std::dynamic_pointer_cast<Stream>(root2->getRightChild());
+
+  ASSERT_TRUE(left2 != nullptr);   // Ensure left child is a join (A:C)
+  ASSERT_TRUE(right2 != nullptr);  // Ensure right child is a stream (B)
+
+  EXPECT_EQ(left2->getLeftChild()->getName(), "A");
+  EXPECT_EQ(left2->getRightChild()->getName(), "C");
+  EXPECT_EQ(right2->getName(), "B");
+
+  // Verify the content of the third join plan (B:A:C)
+  auto joinPlan3 = joinPlans[2];
+  auto root3 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan3->getRoot());
+
+  ASSERT_TRUE(root3 != nullptr);  // Ensure that the root is a join node
+  auto left3 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root3->getLeftChild());
+  auto right3 = std::dynamic_pointer_cast<Stream>(root3->getRightChild());
+
+  ASSERT_TRUE(left3 != nullptr);   // Ensure left child is a join (B:A)
+  ASSERT_TRUE(right3 != nullptr);  // Ensure right child is a stream (C)
+
+  EXPECT_EQ(left3->getLeftChild()->getName(), "B");
+  EXPECT_EQ(left3->getRightChild()->getName(), "A");
+  EXPECT_EQ(right3->getName(), "C");
+
+  // Verify the content of the fourth join plan (B:C:A)
+  auto joinPlan4 = joinPlans[3];
+  auto root4 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan4->getRoot());
+
+  ASSERT_TRUE(root4 != nullptr);  // Ensure that the root is a join node
+  auto left4 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root4->getLeftChild());
+  auto right4 = std::dynamic_pointer_cast<Stream>(root4->getRightChild());
+
+  ASSERT_TRUE(left4 != nullptr);   // Ensure left child is a join (B:C)
+  ASSERT_TRUE(right4 != nullptr);  // Ensure right child is a stream (A)
+
+  EXPECT_EQ(left4->getLeftChild()->getName(), "B");
+  EXPECT_EQ(left4->getRightChild()->getName(), "C");
+  EXPECT_EQ(right4->getName(), "A");
+
+  // Verify the content of the fifth join plan (C:A:B)
+  auto joinPlan5 = joinPlans[4];
+  auto root5 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan5->getRoot());
+
+  ASSERT_TRUE(root5 != nullptr);  // Ensure that the root is a join node
+  auto left5 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root5->getLeftChild());
+  auto right5 = std::dynamic_pointer_cast<Stream>(root5->getRightChild());
+
+  ASSERT_TRUE(left5 != nullptr);   // Ensure left child is a join (C:A)
+  ASSERT_TRUE(right5 != nullptr);  // Ensure right child is a stream (B)
+
+  EXPECT_EQ(left5->getLeftChild()->getName(), "C");
+  EXPECT_EQ(left5->getRightChild()->getName(), "A");
+  EXPECT_EQ(right5->getName(), "B");
+
+  // Verify the content of the sixth join plan (C:B:A)
+  auto joinPlan6 = joinPlans[5];
+  auto root6 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(joinPlan6->getRoot());
+
+  ASSERT_TRUE(root6 != nullptr);  // Ensure that the root is a join node
+  auto left6 =
+      std::dynamic_pointer_cast<SlidingWindowJoin>(root6->getLeftChild());
+  auto right6 = std::dynamic_pointer_cast<Stream>(root6->getRightChild());
+
+  ASSERT_TRUE(left6 != nullptr);   // Ensure left child is a join (C:B)
+  ASSERT_TRUE(right6 != nullptr);  // Ensure right child is a stream (A)
+
+  EXPECT_EQ(left6->getLeftChild()->getName(), "C");
+  EXPECT_EQ(left6->getRightChild()->getName(), "B");
+  EXPECT_EQ(right6->getName(), "A");
 }
 
 // Needs more thought.

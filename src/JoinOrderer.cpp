@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "IntervalJoin.h"
+#include "JoinPlan.h"
 #include "SlidingWindowJoin.h"
 #include "Stream.h"
 #include "TimeDomain.h"
@@ -142,7 +143,7 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
 }
 
 std::vector<std::shared_ptr<JoinPlan>>
-JoinOrderer::getAllSlidingWindowJoinPermutations(
+JoinOrderer::getAllSlidingWindowJoinPlans(
     const std::shared_ptr<JoinPlan>& joinPlan,
     const WindowSpecification generalWindowSpec) {
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans;
@@ -398,6 +399,102 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
   return allPermutations;
 }
 
+std::vector<std::shared_ptr<JoinPlan>>
+JoinOrderer::generateCommutativeJoinPlans(
+    const std::shared_ptr<JoinPlan>& joinPlan) {
+  std::vector<std::shared_ptr<JoinPlan>> commutativePlans;
+
+  // Helper recursive function to handle commutative generation
+  auto generateCommutative =
+      [&](const std::shared_ptr<Node>& node,
+          auto&& generateCommutativeRef) -> std::vector<std::shared_ptr<Node>> {
+    std::vector<std::shared_ptr<Node>> commutativeNodes;
+
+    // If node is a stream (leaf node)
+    if (auto streamNode = std::dynamic_pointer_cast<Stream>(node)) {
+      commutativeNodes.push_back(streamNode);
+      return commutativeNodes;
+    }
+
+    // If node is a SlidingWindowJoin (or IntervalJoin)
+    if (auto joinNode = std::dynamic_pointer_cast<SlidingWindowJoin>(node)) {
+      auto leftChild = joinNode->getLeftChild();
+      auto rightChild = joinNode->getRightChild();
+
+      // Recursively generate commutative pairs for the children
+      auto leftCommutative =
+          generateCommutativeRef(leftChild, generateCommutativeRef);
+      auto rightCommutative =
+          generateCommutativeRef(rightChild, generateCommutativeRef);
+
+      // Generate all commutative pairs for this join (left >< right and right
+      // >< left)
+      for (const auto& left : leftCommutative) {
+        for (const auto& right : rightCommutative) {
+          // Original order: left >< right
+          auto joinOriginal = std::make_shared<SlidingWindowJoin>(
+              left, right, joinNode->getLength(), joinNode->getSlide(),
+              joinNode->getTimeDomain(), joinNode->getTimestampPropagator());
+          commutativeNodes.push_back(joinOriginal);
+
+          // Commutative order: right >< left
+          auto joinCommutative = std::make_shared<SlidingWindowJoin>(
+              right, left, joinNode->getLength(), joinNode->getSlide(),
+              joinNode->getTimeDomain(), joinNode->getTimestampPropagator());
+          commutativeNodes.push_back(joinCommutative);
+        }
+      }
+    }
+
+    return commutativeNodes;
+  };
+
+  // Generate commutative permutations for the root node
+  auto commutativeNodes =
+      generateCommutative(joinPlan->getRoot(), generateCommutative);
+
+  // Convert nodes to JoinPlans and add to the list of commutative plans
+  for (const auto& node : commutativeNodes) {
+    auto newJoinPlan = std::make_shared<JoinPlan>(node);
+    commutativePlans.push_back(newJoinPlan);
+  }
+
+  return commutativePlans;
+}
+
+bool JoinOrderer::checkSlideLengthRatio(
+    const std::vector<WindowSpecification>& windowSpecs) {
+  for (auto& windowSpec : windowSpecs) {
+    // This is just for slinding window joins.
+    assert(windowSpec.type == WindowSpecification::WindowType::SLIDING_WINDOW);
+
+    if (windowSpec.slide >= windowSpec.length) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool JoinOrderer::checkEqualWindows(
+    const std::vector<WindowSpecification>& windowSpecs) {
+  assert(windowSpecs.size() > 0);
+
+  if (windowSpecs.size() == 1) {
+    return true;
+  }
+
+  // Get the first window specification to compare against
+  const WindowSpecification& firstWindow = windowSpecs.front();
+
+  // Iterate through the rest of the window specifications and compare
+  for (size_t i = 1; i < windowSpecs.size(); ++i) {
+    if (!(windowSpecs[i] == firstWindow)) {
+      return false;  // Found a mismatch
+    }
+  }
+  return true;  // no mismatch found
+}
+
 std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
     const JoinPermutation& permutation,
     const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
@@ -480,22 +577,27 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   auto timeDomain = joinPlan->getTimeDomain();
   if (timeDomain == TimeDomain::PROCESSING_TIME) {
     bool hasWindowWithSlideGEQLength = checkSlideLengthRatio(
-        windowSpecs);  // Checks for all windowSpecs if there is one with s >= l
+        windowSpecs);  // Check if one WindowSpecification has s >= l
 
     if (hasWindowWithSlideGEQLength) {
       // A2, A4
-
+      auto isAllSameWindow = checkEqualWindows(windowSpecs);
+      if (isAllSameWindow) {
+        return getAllSlidingWindowJoinPlans(joinPlan, windowSpecs[0]);
+      } else {
+        throw std::runtime_error("A4 not supported yet, s >= l, w_n != w_m");
+        // Check and Apply LWO
+      }
     } else {
       // A1, A3
-      createCommutativePairs(windowAssignments);
-      return windowAssignments;
+      return generateCommutativeJoinPlans(joinPlan);  // AB:C, BA:C ...
+      // return windowAssignments;
     }
 
     // if s >= l
     //  checkAndApplyLWO // A2, A4
     // else
     //  return commutativePairs(joinPlan) // A1, A3
-    getAllSlidingWindowJoinPermutations(joinPlan, windowSpecs[0]);
   } else {
     // TimeDomain::EVENT_TIME
 
