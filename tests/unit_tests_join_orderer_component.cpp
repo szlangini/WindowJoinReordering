@@ -628,37 +628,98 @@ TEST_F(JoinOrdererTest,
       << "Assigned upper bound mismatch.";
 }
 
-//////////////////////
-// Needs more thought.
-TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
-  // Mock window assignments (before update)
-  std::unordered_map<JoinKey, std::vector<WindowSpecification>>
-      windowAssignments;
+TEST_F(JoinOrdererTest, TestCreateCommutativePairs) {
+  // Step 1: Get window specifications and assignments for the testJoinPlan
+  auto [windowSpecs, windowAssignments] =
+      joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
 
-  // Create JoinKey for a SlidingWindowJoin
-  std::unordered_set<std::string> leftStreams = {"A", "B"};
-  std::unordered_set<std::string> rightStreams = {"C"};
-  JoinKey slidingJoinKey(JoinType::SlidingWindowJoin, leftStreams,
-                         rightStreams);
+  // Step 2: Call createCommutativePairs to generate commutative pairs
+  joinOrderer.createCommutativePairs(windowAssignments);
 
-  // Create WindowSpecification and assign it
-  WindowSpecification slidingWindowSpec =
-      WindowSpecification::createSlidingWindowSpecification(1000, 500, "A");
-  windowAssignments[slidingJoinKey] = {slidingWindowSpec};
+  // Step 3: Verify that commutative pairs have been added
 
-  // Call the function to update window assignments
+  // Define the original and commutative pairs for AB:C and C:AB
+  JoinKey keyABC;
+  keyABC.leftStreams = {"A", "B"};
+  keyABC.rightStreams = {"C"};
+  keyABC.joinType = JoinType::SlidingWindowJoin;
+
+  JoinKey keyCAB;
+  keyCAB.leftStreams = {"C"};
+  keyCAB.rightStreams = {"A", "B"};
+  keyCAB.joinType = JoinType::SlidingWindowJoin;
+
+  // Define the commutative pairs for A:B and B:A
+  JoinKey keyAB;
+  keyAB.leftStreams = {"A"};
+  keyAB.rightStreams = {"B"};
+  keyAB.joinType = JoinType::SlidingWindowJoin;
+
+  JoinKey keyBA;
+  keyBA.leftStreams = {"B"};
+  keyBA.rightStreams = {"A"};
+  keyBA.joinType = JoinType::SlidingWindowJoin;
+
+  // Print the window assignments for debugging purposes
+  printWindowAssignments(windowAssignments);
+
+  // Verify that all commutative pairs are present and equal
+  EXPECT_EQ(windowAssignments.count(keyABC), 1);
+  EXPECT_EQ(windowAssignments.count(keyCAB), 1);
+  EXPECT_EQ(windowAssignments[keyCAB], windowAssignments[keyABC]);
+
+  EXPECT_EQ(windowAssignments.count(keyAB), 1);
+  EXPECT_EQ(windowAssignments.count(keyBA), 1);
+  EXPECT_EQ(windowAssignments[keyBA], windowAssignments[keyAB]);
+}
+
+TEST_F(JoinOrdererTest, TestDeriveAllWindowPermutations) {
+  // Step 1: Get window specifications and assignments for the testJoinPlan
+  auto [windowSpecs, windowAssignments] =
+      joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
+
+  // Step 2: Call deriveAllWindowPermutations to generate derived permutations
   joinOrderer.deriveAllWindowPermutations(windowAssignments);
 
-  // Expect that the window assignments are updated correctly
-  auto updatedWindowSpecs = windowAssignments[slidingJoinKey];
+  // Step 3: Verify the existence of derived window assignments for AC, BC, BA,
+  // and CA
+  JoinKey keyAB;
+  keyAB.leftStreams = {"A"};
+  keyAB.rightStreams = {"B"};
+  keyAB.joinType = JoinType::SlidingWindowJoin;
 
-  // Check that the size and contents are correct after update
-  EXPECT_EQ(updatedWindowSpecs.size(), 1);
-  EXPECT_EQ(updatedWindowSpecs[0].length, 1000);
-  EXPECT_EQ(updatedWindowSpecs[0].slide, 500);
+  JoinKey keyAC;
+  keyAC.leftStreams = {"A"};
+  keyAC.rightStreams = {"C"};
+  keyAC.joinType = JoinType::SlidingWindowJoin;
 
-  // Verify that the correct time propagator is assigned
-  for (auto windowSpec : updatedWindowSpecs) {
-    EXPECT_EQ(windowSpec.timestampPropagator, "A");
-  }
+  JoinKey keyBA;
+  keyBA.leftStreams = {"B"};
+  keyBA.rightStreams = {"A"};
+  keyBA.joinType = JoinType::SlidingWindowJoin;
+
+  JoinKey keyCA;
+  keyCA.leftStreams = {"C"};
+  keyCA.rightStreams = {"A"};
+  keyCA.joinType = JoinType::SlidingWindowJoin;
+
+  JoinKey keyBC;
+  keyBC.leftStreams = {"B"};
+  keyBC.rightStreams = {"C"};
+  keyBC.joinType = JoinType::SlidingWindowJoin;
+
+  // Verify that AC is derived from AB
+  EXPECT_EQ(windowAssignments.count(keyAC), 1);
+  EXPECT_EQ(windowAssignments[keyAC], windowAssignments[keyAB]);
+
+  // Verify that CA is derived as a commutative pair
+  EXPECT_EQ(windowAssignments.count(keyCA), 1);
+  EXPECT_EQ(windowAssignments[keyCA], windowAssignments[keyAC]);
+
+  // Verify that BA is derived from AB as a commutative pair
+  EXPECT_EQ(windowAssignments.count(keyBA), 1);
+  EXPECT_EQ(windowAssignments[keyBA], windowAssignments[keyAB]);
+
+  // Verify that BC is derived as another permutation
+  EXPECT_EQ(windowAssignments.count(keyBC), 1);
 }

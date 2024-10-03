@@ -1,6 +1,9 @@
 #include "Utils.h"
 
+#include <iostream>
 #include <random>
+
+#include "WindowJoinOperator.h"
 
 std::shared_ptr<Stream> createStream(
     const std::string& name, int numTuples,
@@ -29,4 +32,23 @@ long randomValueDistribution(int index, int multiplicator) {
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> dis(1, 100);
   return multiplicator * dis(gen);
+}
+
+void printJoinKeyVector(const std::vector<JoinKey>& joinKeys) {
+  for (const auto& joinKey : joinKeys) {
+    std::cout << joinKey.toString() << std::endl;
+  }
+}
+
+void printWindowAssignments(
+    const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                             JoinKeyHash>& windowAssignments) {
+  for (const auto& entry : windowAssignments) {
+    std::cout << entry.first.toString() << " -> [";
+    for (const auto& spec : entry.second) {
+      std::cout << spec.toString()
+                << ", ";  // Assuming WindowSpecification has a toString()
+    }
+    std::cout << "]" << std::endl;
+  }
 }

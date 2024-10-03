@@ -29,7 +29,8 @@ class JoinOrderer {
       std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap);
 
   std::pair<std::vector<WindowSpecification>,
-            std::unordered_map<JoinKey, std::vector<WindowSpecification>>>
+            std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                               JoinKeyHash>>
   getWindowSpecificationsAndAssignments(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
@@ -41,22 +42,22 @@ class JoinOrderer {
 
   // For EVENT_TIME only, derives all possible Window Permutations (Algorithm 1)
   void deriveAllWindowPermutations(
-      std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
-          windowAssignments);
+      std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                         JoinKeyHash>& windowAssignments);
 
   std::vector<JoinKey> decomposeJoinPair(const JoinKey& joinKey);
 
   void createCommutativePairs(
-      std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
-          windowAssignments);
+      std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                         JoinKeyHash>& windowAssignments);
 
   std::vector<JoinPermutation> generateAllJoinPermutations(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
   std::shared_ptr<JoinPlan> buildJoinPlanFromPermutation(
       const JoinPermutation& permutation,
-      const std::unordered_map<JoinKey, std::vector<WindowSpecification>>&
-          windowAssignments,
+      const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                               JoinKeyHash>& windowAssignments,
       const std::unordered_map<std::string, std::shared_ptr<Stream>>&
           streamMap);
 

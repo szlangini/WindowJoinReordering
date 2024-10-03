@@ -3,6 +3,7 @@
 #define WINDOWSPECIFICATION_H
 
 #include <functional>
+#include <sstream>
 #include <string>
 struct WindowSpecification {
   enum class WindowType { SLIDING_WINDOW, INTERVAL_WINDOW, DEFAULT_WINDOW };
@@ -54,6 +55,13 @@ struct WindowSpecification {
            slide == other.slide && lowerBound == other.lowerBound &&
            upperBound == other.upperBound &&
            timestampPropagator == other.timestampPropagator;
+  }
+
+  std::string toString() const {
+    std::stringstream ss;
+    ss << "WindowSpecification(Length: " << length << ", Slide: " << slide
+       << ", TimestampPropagator: " << timestampPropagator << ")";
+    return ss.str();
   }
 };
 

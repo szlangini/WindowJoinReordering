@@ -29,38 +29,75 @@ struct JoinKey {
 
   // Equality operator
   bool operator==(const JoinKey& other) const {
-    return joinType == other.joinType && leftStreams == other.leftStreams &&
-           rightStreams == other.rightStreams;
+    // Compare join types
+    if (joinType != other.joinType) {
+      return false;
+    }
+
+    // Compare unordered sets of left and right streams
+    std::unordered_set<std::string> leftSet(leftStreams.begin(),
+                                            leftStreams.end());
+    std::unordered_set<std::string> rightSet(rightStreams.begin(),
+                                             rightStreams.end());
+
+    std::unordered_set<std::string> otherLeftSet(other.leftStreams.begin(),
+                                                 other.leftStreams.end());
+    std::unordered_set<std::string> otherRightSet(other.rightStreams.begin(),
+                                                  other.rightStreams.end());
+
+    return leftSet == otherLeftSet && rightSet == otherRightSet;
+  }
+
+  std::string joinTypeToString(JoinType joinType) const {
+    switch (joinType) {
+      case JoinType::SlidingWindowJoin:
+        return "SlidingWindowJoin";
+      case JoinType::IntervalJoin:
+        return "IntervalJoin";
+      // Add other cases if necessary
+      default:
+        return "UnknownJoinType";
+    }
+  }
+
+  std::string toString() const {
+    std::stringstream ss;
+    ss << "JoinKey(Left: {";
+    for (const auto& stream : leftStreams) {
+      ss << stream << ", ";
+    }
+    ss << "}, Right: {";
+    for (const auto& stream : rightStreams) {
+      ss << stream << ", ";
+    }
+    ss << "}, JoinType: " << joinTypeToString(joinType) << ")";
+    return ss.str();
   }
 };
 
-// Custom hash function for JoinKey
-namespace std {
-template <>
-struct hash<JoinKey> {
-  size_t operator()(const JoinKey& key) const {
-    size_t h1 =
-        std::hash<int>()(static_cast<int>(key.joinType));  // Hash join type
-    size_t h2 = 0;
+struct JoinKeyHash {
+  std::size_t operator()(const JoinKey& key) const {
+    std::unordered_set<std::string> leftSet(key.leftStreams.begin(),
+                                            key.leftStreams.end());
+    std::unordered_set<std::string> rightSet(key.rightStreams.begin(),
+                                             key.rightStreams.end());
 
-    // Hash the left streams
-    for (const auto& stream : key.leftStreams) {
-      h2 ^=
-          std::hash<std::string>()(stream) + 0x9e3779b9 + (h2 << 6) + (h2 >> 2);
+    // Compute combined hash for both sets
+    std::size_t leftHash = 0;
+    std::size_t rightHash = 0;
+
+    for (const auto& stream : leftSet) {
+      leftHash ^= std::hash<std::string>{}(stream);
     }
 
-    size_t h3 = 0;
-
-    // Hash the right streams
-    for (const auto& stream : key.rightStreams) {
-      h3 ^=
-          std::hash<std::string>()(stream) + 0x9e3779b9 + (h3 << 6) + (h3 >> 2);
+    for (const auto& stream : rightSet) {
+      rightHash ^= std::hash<std::string>{}(stream);
     }
 
-    return h1 ^ (h2 << 1) ^ (h3 << 1);  // Combine the hashes
+    return leftHash ^ rightHash ^
+           std::hash<int>{}(static_cast<int>(key.joinType));
   }
 };
-}  // namespace std
 
 class WindowJoinOperator : public Node {
  public:
