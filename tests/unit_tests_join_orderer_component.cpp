@@ -412,6 +412,223 @@ TEST_F(JoinOrdererTest, TestGetAllSlidingWindowJoinPlans) {
   EXPECT_EQ(right6->getName(), "A");
 }
 
+TEST_F(JoinOrdererTest, TestGetWindowSpecificationsAndAssignments_SlidingOnly) {
+  // Step 1: Create Streams A, B, C with sample data
+  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+  auto C = createStream("C", 5, linearValueDistribution, 100, 3);
+
+  // Step 2: Define Window Specifications
+  long lengthAB = 10;
+  long slideAB = 5;  // A:B sliding window
+
+  long lengthABC = 20;
+  long slideABC = 10;  // AB:C sliding window
+
+  // Step 3: Create the Sliding Window JoinPlan for ABC
+  auto joinAB = std::make_shared<SlidingWindowJoin>(
+      A, B, lengthAB, slideAB, TimeDomain::PROCESSING_TIME);
+  auto joinABC = std::make_shared<SlidingWindowJoin>(
+      joinAB, C, lengthABC, slideABC, TimeDomain::PROCESSING_TIME);
+
+  auto testJoinPlan = std::make_shared<JoinPlan>(joinABC);
+
+  // Step 4: Call the method under test
+  auto result = joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
+
+  // Step 5: Verify the returned window specifications
+  const auto& windowSpecs = result.first;
+  ASSERT_EQ(windowSpecs.size(),
+            2);  // Two window specs: one for A:B, one for AB:C
+
+  // Verify WindowSpec for A:B
+  EXPECT_EQ(windowSpecs[0].length, lengthAB);
+  EXPECT_EQ(windowSpecs[0].slide, slideAB);
+  EXPECT_EQ(windowSpecs[0].type,
+            WindowSpecification::WindowType::SLIDING_WINDOW);
+
+  // Verify WindowSpec for AB:C
+  EXPECT_EQ(windowSpecs[1].length, lengthABC);
+  EXPECT_EQ(windowSpecs[1].slide, slideABC);
+  EXPECT_EQ(windowSpecs[1].type,
+            WindowSpecification::WindowType::SLIDING_WINDOW);
+
+  // Step 6: Verify windowAssignments for each join
+  const auto& windowAssignments = result.second;
+  ASSERT_EQ(windowAssignments.size(), 2);  // A:B and AB:C
+
+  // Verify join key A:B
+  JoinKey keyAB(JoinType::SlidingWindowJoin, {"A"}, {"B"});
+  ASSERT_TRUE(windowAssignments.count(keyAB));
+  EXPECT_EQ(windowAssignments.at(keyAB).size(),
+            1);  // Only one windowSpec for A:B
+  EXPECT_EQ(windowAssignments.at(keyAB)[0],
+            windowSpecs[0]);  // Matches first spec
+
+  // Verify join key AB:C
+  JoinKey keyABC(JoinType::SlidingWindowJoin, {"A", "B"}, {"C"});
+  ASSERT_TRUE(windowAssignments.count(keyABC));
+  EXPECT_EQ(windowAssignments.at(keyABC).size(),
+            1);  // Only one windowSpec for AB:C
+  EXPECT_EQ(windowAssignments.at(keyABC)[0],
+            windowSpecs[1]);  // Matches second spec
+}
+
+TEST_F(JoinOrdererTest,
+       TestGetWindowSpecificationsAndAssignments_SingleSlidingJoin) {
+  // Step 1: Create Streams A, B with sample data
+  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+
+  // Step 2: Define a Sliding Window Specification for A:B
+  long length = 15;
+  long slide = 5;  // Sliding window
+
+  // Step 3: Create the Sliding Window JoinPlan for A:B
+  auto joinAB = std::make_shared<SlidingWindowJoin>(
+      A, B, length, slide, TimeDomain::PROCESSING_TIME);
+  auto testJoinPlan = std::make_shared<JoinPlan>(joinAB);
+
+  // Step 4: Call the method under test
+  auto result = joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
+
+  // Step 5: Verify the returned window specifications
+  const auto& windowSpecs = result.first;
+  ASSERT_EQ(windowSpecs.size(), 1);  // Only one window spec for A:B
+
+  // Verify WindowSpec for A:B
+  EXPECT_EQ(windowSpecs[0].length, length);
+  EXPECT_EQ(windowSpecs[0].slide, slide);
+  EXPECT_EQ(windowSpecs[0].type,
+            WindowSpecification::WindowType::SLIDING_WINDOW);
+
+  // Step 6: Verify windowAssignments for A:B
+  const auto& windowAssignments = result.second;
+  ASSERT_EQ(windowAssignments.size(), 1);  // Only A:B join exists
+
+  // Verify join key A:B
+  JoinKey keyAB(JoinType::SlidingWindowJoin, {"A"}, {"B"});
+  ASSERT_TRUE(windowAssignments.count(keyAB));
+  EXPECT_EQ(windowAssignments.at(keyAB).size(),
+            1);  // Only one windowSpec for A:B
+  EXPECT_EQ(windowAssignments.at(keyAB)[0],
+            windowSpecs[0]);  // Matches the spec
+}
+
+TEST_F(JoinOrdererTest,
+       TestGetWindowSpecificationsAndAssignments_TwoWayIntervalJoin) {
+  // Step 1: Create Streams A, B, C with sample data
+  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+  auto C = createStream("C", 5, linearValueDistribution, 100, 3);
+
+  // Step 2: Define Interval Window Specifications with timestamp propagators
+  long lowerBoundAB = 5;
+  long upperBoundAB = 15;          // A:B interval join
+  std::string propagatorAB = "A";  // Propagate timestamps from stream A
+
+  long lowerBoundABC = 10;
+  long upperBoundABC = 20;          // AB:C interval join
+  std::string propagatorABC = "A";  // Propagate timestamps from the AB result
+
+  // Step 3: Create the Interval JoinPlan for ABC
+  auto joinAB = std::make_shared<IntervalJoin>(A, B, lowerBoundAB, upperBoundAB,
+                                               propagatorAB);
+  auto joinABC = std::make_shared<IntervalJoin>(joinAB, C, lowerBoundABC,
+                                                upperBoundABC, propagatorABC);
+
+  auto testJoinPlan = std::make_shared<JoinPlan>(joinABC);
+
+  // Step 4: Call the method under test
+  auto result = joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
+
+  // Step 5: Verify the returned window specifications
+  const auto& windowSpecs = result.first;
+  ASSERT_EQ(windowSpecs.size(),
+            2);  // Two window specs: one for A:B, one for AB:C
+
+  // Verify WindowSpec for A:B (interval join)
+  EXPECT_EQ(windowSpecs[0].lowerBound, lowerBoundAB);
+  EXPECT_EQ(windowSpecs[0].upperBound, upperBoundAB);
+  EXPECT_EQ(windowSpecs[0].timestampPropagator,
+            propagatorAB);  // Verify propagator
+  EXPECT_EQ(windowSpecs[0].type,
+            WindowSpecification::WindowType::INTERVAL_WINDOW);
+
+  // Verify WindowSpec for AB:C (interval join)
+  EXPECT_EQ(windowSpecs[1].lowerBound, lowerBoundABC);
+  EXPECT_EQ(windowSpecs[1].upperBound, upperBoundABC);
+  EXPECT_EQ(windowSpecs[1].timestampPropagator,
+            propagatorABC);  // Verify propagator
+  EXPECT_EQ(windowSpecs[1].type,
+            WindowSpecification::WindowType::INTERVAL_WINDOW);
+
+  // Step 6: Verify windowAssignments for each join
+  const auto& windowAssignments = result.second;
+  ASSERT_EQ(windowAssignments.size(), 2);  // A:B and AB:C
+
+  // Verify join key A:B
+  JoinKey keyAB(JoinType::IntervalJoin, {"A"}, {"B"});
+  ASSERT_TRUE(windowAssignments.count(keyAB));
+  EXPECT_EQ(windowAssignments.at(keyAB).size(),
+            1);  // Only one windowSpec for A:B
+  EXPECT_EQ(windowAssignments.at(keyAB)[0],
+            windowSpecs[0]);  // Matches first spec
+
+  // Verify join key AB:C
+  JoinKey keyABC(JoinType::IntervalJoin, {"A", "B"}, {"C"});
+  ASSERT_TRUE(windowAssignments.count(keyABC));
+  EXPECT_EQ(windowAssignments.at(keyABC).size(),
+            1);  // Only one windowSpec for AB:C
+  EXPECT_EQ(windowAssignments.at(keyABC)[0],
+            windowSpecs[1]);  // Matches second spec
+}
+
+TEST_F(JoinOrdererTest,
+       TestGetWindowSpecificationsAndAssignments_SingleStream_IntervalJoin) {
+  // Step 1: Create a single Stream A with sample data
+  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+
+  // Step 2: Define an IntervalJoin between A and B with specific bounds
+  long lowerBound = 10;
+  long upperBound = 20;
+  std::string timestampPropagator = "A";
+
+  // Create an IntervalJoin between A and B
+  auto intervalJoinAB = std::make_shared<IntervalJoin>(
+      A, B, lowerBound, upperBound, timestampPropagator);
+  auto joinPlanAB = std::make_shared<JoinPlan>(intervalJoinAB);
+
+  // Step 3: Call getWindowSpecificationsAndAssignments to retrieve specs and
+  // assignments
+  JoinOrderer joinOrderer;
+  auto [windowSpecs, windowAssignments] =
+      joinOrderer.getWindowSpecificationsAndAssignments(joinPlanAB);
+
+  // Step 4: Validate the window specifications
+  ASSERT_EQ(windowSpecs.size(), 1)
+      << "Expected one window specification for IntervalJoin.";
+  EXPECT_EQ(windowSpecs[0].lowerBound, lowerBound) << "Lower bound mismatch.";
+  EXPECT_EQ(windowSpecs[0].upperBound, upperBound) << "Upper bound mismatch.";
+  EXPECT_EQ(windowSpecs[0].timestampPropagator, timestampPropagator)
+      << "Timestamp propagator mismatch.";
+
+  // Step 5: Validate the window assignments
+  JoinKey keyAB;
+  keyAB.joinType = JoinType::IntervalJoin;
+  keyAB.leftStreams = {"A"};
+  keyAB.rightStreams = {"B"};
+
+  ASSERT_EQ(windowAssignments.count(keyAB), 1)
+      << "Expected window assignment for A:B.";
+  EXPECT_EQ(windowAssignments[keyAB][0].lowerBound, lowerBound)
+      << "Assigned lower bound mismatch.";
+  EXPECT_EQ(windowAssignments[keyAB][0].upperBound, upperBound)
+      << "Assigned upper bound mismatch.";
+}
+
+//////////////////////
 // Needs more thought.
 TEST_F(JoinOrdererTest, TestCreateUpdatedWindowAssignments) {
   // Mock window assignments (before update)

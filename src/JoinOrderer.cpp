@@ -118,7 +118,8 @@ JoinOrderer::getWindowSpecificationsAndAssignments(
       joinKey.joinType = JoinType::IntervalJoin;
       joinKey.leftStreams =
           intervalJoin->getLeftChild()->getOutputStream()->getBaseStreams();
-      joinKey.rightStreams = intervalJoin->getOutputStream()->getBaseStreams();
+      joinKey.rightStreams =
+          intervalJoin->getRightChild()->getOutputStream()->getBaseStreams();
 
       std::vector<WindowSpecification> intervalSpecs({intervalSpec});
       windowAssignments[joinKey] = intervalSpecs;  // Map to the operator
