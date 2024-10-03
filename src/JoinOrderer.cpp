@@ -249,8 +249,23 @@ void JoinOrderer::createCommutativePairs(
     commutativePair.rightStreams = joinKey.leftStreams;
     commutativePair.joinType = joinKey.joinType;
 
-    // Add the commutative pair with the same window specifications
-    newAssignments[commutativePair] = windowSpecs;
+    // If it's an IntervalJoin, swap the bounds
+    if (commutativePair.joinType == JoinType::IntervalJoin) {
+      // Assuming one window spec per join
+      assert(windowSpecs.size() == 1);  // IntervalJoin should have 1 spec
+      const auto& intervalSpec = windowSpecs.front();
+
+      // Create a swapped WindowSpecification for commutative pair
+      WindowSpecification swappedSpec =
+          WindowSpecification::createIntervalWindowSpecification(
+              intervalSpec.upperBound, intervalSpec.lowerBound,
+              intervalSpec.timestampPropagator);
+
+      newAssignments[commutativePair].push_back(swappedSpec);
+    } else {
+      // For SlidingWindowJoin, keep the same window spec
+      newAssignments[commutativePair] = windowSpecs;
+    }
   }
 
   // Merge the new commutative pairs into the original windowAssignments
@@ -273,27 +288,67 @@ void JoinOrderer::deriveAllWindowPermutations(
       auto decomposedPairs = decomposeJoinPair(joinKey);
 
       for (auto& decomposedPair : decomposedPairs) {
-        // For each decomposedPair (joinPair) get the appropriate Window
-        // Specification
-        auto windowSpecs = windowAssignments.at(joinKey);
         assert(windowSpecs.size() == 1);
+        const auto& windowSpec =
+            windowSpecs.front();  // Expecting only one window spec per join
+        const auto& timePropagator = windowSpec.timestampPropagator;
 
-        auto timePropagator = windowSpecs.front().timestampPropagator;
-
-        // Check the left stream's name in the decomposed pair
-        const auto& leftStreamNames = decomposedPair.leftStreams;
-
-        if (leftStreamNames.find(timePropagator) != leftStreamNames.end()) {
-          windowAssignments[decomposedPair].push_back(windowSpecs.front());
+        // Step 1: Check if the timePropagator is in the leftStreams
+        if (decomposedPair.leftStreams.find(timePropagator) !=
+            decomposedPair.leftStreams.end()) {
+          // Assign the original window spec if the propagator is correctly
+          // positioned
+          windowAssignments[decomposedPair].push_back(windowSpec);
         } else {
-          // Add other window specs (necessary for A4 case)
-          for (const auto& [key, ws] : windowAssignments) {
-            for (const auto& spec : ws) {
-              windowAssignments[decomposedPair].push_back(spec);
+          // Step 2: TimePropagator is not in leftStreams
+          if (joinKey.joinType == JoinType::IntervalJoin) {
+            // Step 2.1: If it's an IntervalJoin, swap bounds
+            // Check if timePropagator is in rightStreams
+            if (decomposedPair.rightStreams.find(timePropagator) !=
+                decomposedPair.rightStreams.end()) {
+              // Create a swapped window specification for the commutative case
+              WindowSpecification swappedSpec =
+                  WindowSpecification::createIntervalWindowSpecification(
+                      windowSpec.upperBound, windowSpec.lowerBound,
+                      timePropagator);
+              // Assign the swapped window spec
+              windowAssignments[decomposedPair].push_back(swappedSpec);
+            }
+          } else if (joinKey.joinType == JoinType::SlidingWindowJoin) {
+            // Step 2.2: If it's a SlidingWindowJoin, propagate all window specs
+            // (A4 case)
+            for (const auto& [key, ws] : windowAssignments) {
+              for (const auto& spec : ws) {
+                windowAssignments[decomposedPair].push_back(spec);
+              }
             }
           }
         }
       }
+
+      // for (auto& decomposedPair : decomposedPairs) {
+      //   // For each decomposedPair (joinPair) get the appropriate Window
+      //   // Specification
+      //   auto windowSpecs = windowAssignments.at(joinKey);
+      //   assert(windowSpecs.size() == 1);
+
+      //   auto timePropagator = windowSpecs.front().timestampPropagator;
+
+      //   // Check the left stream's name in the decomposed pair
+      //   const auto& leftStreamNames = decomposedPair.leftStreams;
+
+      //   if (leftStreamNames.find(timePropagator) != leftStreamNames.end())
+      //   {
+      //     windowAssignments[decomposedPair].push_back(windowSpecs.front());
+      //   } else {
+      //     // Add other window specs (necessary for A4 case)
+      //     for (const auto& [key, ws] : windowAssignments) {
+      //       for (const auto& spec : ws) {
+      //         windowAssignments[decomposedPair].push_back(spec);
+      //       }
+      //     }
+      //   }
+      // }
     }
   }
   createCommutativePairs(windowAssignments);
@@ -329,8 +384,8 @@ std::vector<JoinPermutation> JoinOrderer::generateAllJoinPermutations(
     for (size_t i = 0; i < perm.size(); ++i) {
       right = perm[i];
 
-      // Skip the first stream in the permutation, because we need at least two
-      // streams to form a join
+      // Skip the first stream in the permutation, because we need at least
+      // two streams to form a join
       if (leftSet.empty()) {
         leftSet.insert(right);
         continue;
@@ -486,8 +541,8 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
     if (i == 0) {
       leftChild = streamMap.at(*joinKey.leftStreams.begin());
     } else {
-      // For subsequent steps, reuse the previously constructed join as the left
-      // child
+      // For subsequent steps, reuse the previously constructed join as the
+      // left child
       leftChild = currentJoin;  // Use the accumulated join as the left child
     }
 
@@ -514,72 +569,6 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
   return std::make_shared<JoinPlan>(currentJoin);
 }
 
-// std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
-//     const JoinPermutation& permutation,
-//     const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
-//                              JoinKeyHash>& windowAssignments,
-//     const std::unordered_map<std::string, std::shared_ptr<Stream>>&
-//     streamMap) {
-//   std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
-
-//   // Iterate over the steps in the permutation
-//   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
-//     const JoinKey& joinKey = permutation.getSteps()[i];
-
-//     // Retrieve window specifications for the current join
-//     std::cout << joinKey.toString() << std::endl;
-//     const auto& windowSpecs = windowAssignments.at(joinKey);
-
-//     if (windowSpecs.size() != 1) {
-//       return nullptr;  // Invalid case, we should always expect one spec per
-//                        // join step
-//     }  // TODO: Maybe needs adjustment for CASE A4 where multiple window
-//     specs
-//        // actually semnatically mean something.
-//     const auto& windowSpec = windowSpecs.front();
-//     auto timestampPropagator = windowSpec.timestampPropagator;
-
-//     assert(joinKey.rightStreams.size() == 1);
-
-//     std::shared_ptr<Node> leftChild;
-//     std::shared_ptr<Node> rightChild =
-//         streamMap.at(*joinKey.rightStreams.begin());
-
-//     // First join: Use streams from the streamMap
-//     if (i == 0) {
-//       leftChild = streamMap.at(*joinKey.leftStreams.begin());
-//     }
-//     // Subsequent joins: Use the current join as the left child
-//     else {
-//       leftChild = currentJoin;  // Use the accumulated join
-//     }
-
-//     // Use the join type to create the appropriate join operator
-//     if (joinKey.joinType == JoinType::SlidingWindowJoin) {
-//       currentJoin = std::make_shared<SlidingWindowJoin>(
-//           leftChild,   // Left child (either stream or previous join result)
-//           rightChild,  // Right child (stream)
-//           windowSpec.length,       // Sliding Window Length
-//           windowSpec.slide,        // Sliding Window Slide
-//           TimeDomain::EVENT_TIME,  // Assuming Event Time, change as needed
-//           timestampPropagator      // Timestamp propagator
-//       );
-//     } else if (joinKey.joinType == JoinType::IntervalJoin) {
-//       currentJoin = std::make_shared<IntervalJoin>(
-//           leftChild,   // Left child (either stream or previous join result)
-//           rightChild,  // Right child (stream)
-//           windowSpec.lowerBound,  // Interval lower bound
-//           windowSpec.upperBound,  // Interval upper bound
-//           timestampPropagator     // Timestamp propagator
-//       );
-//     } else {
-//       throw std::runtime_error("Unknown JoinType");
-//     }
-//   }
-
-// Return the final JoinPlan built from the permutation
-// return std::make_shared<JoinPlan>(currentJoin);
-// }
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   // Setup: Get WindowSpecs, Assignments, Propagators and TimeDomain
@@ -622,9 +611,9 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   } else {
     // TimeDomain::EVENT_TIME
 
-    // ABC_w2 -> AC_w2, BC_w2 -- TimestampPropagator filter => AC_W2. Finally we
-    // have AB_w1 AC_w2 with their commutations. That we can reorder to: (ABC,
-    // BAC, CAB, ACB, [but not BCA or CBA])
+    // ABC_w2 -> AC_w2, BC_w2 -- TimestampPropagator filter => AC_W2. Finally
+    // we have AB_w1 AC_w2 with their commutations. That we can reorder to:
+    // (ABC, BAC, CAB, ACB, [but not BCA or CBA])
     deriveAllWindowPermutations(windowAssignments);
   }
 
@@ -642,5 +631,3 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
   }
   return validJoinPlans;
 }
-
-// FOR ABC in ET Case e.g., A
