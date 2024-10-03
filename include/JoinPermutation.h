@@ -16,11 +16,24 @@ class JoinPermutation {
   void addJoinStep(const JoinKey& joinKey) { steps.push_back(joinKey); }
 
   // Get the current join order as a vector of JoinKeys
-  std::vector<JoinKey> getSteps() const { return steps; }
+  const std::vector<JoinKey>& getSteps() const { return steps; }
 
   // Compare two JoinPermutations (optional helper)
   bool operator==(const JoinPermutation& other) const {
     return steps == other.steps;
+  }
+
+  std::string toString() const {
+    std::stringstream ss;
+    ss << "JoinPermutation: [";
+    for (size_t i = 0; i < steps.size(); ++i) {
+      ss << steps[i].toString();  // Assuming JoinKey has a toString method
+      if (i != steps.size() - 1) {
+        ss << " -> ";  // Separate each join step
+      }
+    }
+    ss << "]";
+    return ss.str();
   }
 };
 

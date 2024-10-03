@@ -20,7 +20,7 @@
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 std::string demangle(const char* mangledName) {
   int status = -1;
@@ -459,32 +459,36 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
     const JoinKey& joinKey = permutation.getSteps()[i];
 
+    // Check if the current join is part of the window assignments
+    if (windowAssignments.find(joinKey) == windowAssignments.end()) {
+#if DEBUG_MODE
+      std::cerr << "Error: JoinKey not found in windowAssignments: "
+                << joinKey.toString() << std::endl;
+#endif
+      return nullptr;  // Return null if we can't find the window assignment
+    }
+
     // Retrieve window specifications for the current join
+    // Check if there are more than 1 windows assigned.
     const auto& windowSpecs = windowAssignments.at(joinKey);
     if (windowSpecs.size() != 1) {
       return nullptr;  // Invalid case, we should always expect one spec per
                        // join step
-    }  // TODO: Maybe needs adjustment for CASE A4 where multiple window specs
-       // actually semnatically mean something.
+    }
     const auto& windowSpec = windowSpecs.front();
     auto timestampPropagator = windowSpec.timestampPropagator;
-
-    // Ensure the left and right streams in the join key are present in the
-    // stream map
-    assert(joinKey.leftStreams.size() == 1);
-    assert(joinKey.rightStreams.size() == 1);
 
     std::shared_ptr<Node> leftChild;
     std::shared_ptr<Node> rightChild =
         streamMap.at(*joinKey.rightStreams.begin());
 
-    // First join: Use streams from the streamMap
+    // If this is the first step, both left and right are streams
     if (i == 0) {
       leftChild = streamMap.at(*joinKey.leftStreams.begin());
-    }
-    // Subsequent joins: Use the current join as the left child
-    else {
-      leftChild = currentJoin;  // Use the accumulated join
+    } else {
+      // For subsequent steps, reuse the previously constructed join as the left
+      // child
+      leftChild = currentJoin;  // Use the accumulated join as the left child
     }
 
     // Use the join type to create the appropriate join operator
@@ -492,27 +496,90 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
       currentJoin = std::make_shared<SlidingWindowJoin>(
           leftChild,   // Left child (either stream or previous join result)
           rightChild,  // Right child (stream)
-          windowSpec.length,       // Sliding Window Length
-          windowSpec.slide,        // Sliding Window Slide
-          TimeDomain::EVENT_TIME,  // Assuming Event Time, change as needed
-          timestampPropagator      // Timestamp propagator
-      );
+          windowSpec.length, windowSpec.slide,
+          timestampPropagator == "NONE" ? TimeDomain::PROCESSING_TIME
+                                        : TimeDomain::EVENT_TIME,
+          timestampPropagator);
     } else if (joinKey.joinType == JoinType::IntervalJoin) {
       currentJoin = std::make_shared<IntervalJoin>(
           leftChild,   // Left child (either stream or previous join result)
           rightChild,  // Right child (stream)
-          windowSpec.lowerBound,  // Interval lower bound
-          windowSpec.upperBound,  // Interval upper bound
-          timestampPropagator     // Timestamp propagator
-      );
+          windowSpec.lowerBound, windowSpec.upperBound, timestampPropagator);
     } else {
       throw std::runtime_error("Unknown JoinType");
     }
   }
 
-  // Return the final JoinPlan built from the permutation
+  // Return the final JoinPlan built from the last join operator
   return std::make_shared<JoinPlan>(currentJoin);
 }
+
+// std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
+//     const JoinPermutation& permutation,
+//     const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+//                              JoinKeyHash>& windowAssignments,
+//     const std::unordered_map<std::string, std::shared_ptr<Stream>>&
+//     streamMap) {
+//   std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
+
+//   // Iterate over the steps in the permutation
+//   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
+//     const JoinKey& joinKey = permutation.getSteps()[i];
+
+//     // Retrieve window specifications for the current join
+//     std::cout << joinKey.toString() << std::endl;
+//     const auto& windowSpecs = windowAssignments.at(joinKey);
+
+//     if (windowSpecs.size() != 1) {
+//       return nullptr;  // Invalid case, we should always expect one spec per
+//                        // join step
+//     }  // TODO: Maybe needs adjustment for CASE A4 where multiple window
+//     specs
+//        // actually semnatically mean something.
+//     const auto& windowSpec = windowSpecs.front();
+//     auto timestampPropagator = windowSpec.timestampPropagator;
+
+//     assert(joinKey.rightStreams.size() == 1);
+
+//     std::shared_ptr<Node> leftChild;
+//     std::shared_ptr<Node> rightChild =
+//         streamMap.at(*joinKey.rightStreams.begin());
+
+//     // First join: Use streams from the streamMap
+//     if (i == 0) {
+//       leftChild = streamMap.at(*joinKey.leftStreams.begin());
+//     }
+//     // Subsequent joins: Use the current join as the left child
+//     else {
+//       leftChild = currentJoin;  // Use the accumulated join
+//     }
+
+//     // Use the join type to create the appropriate join operator
+//     if (joinKey.joinType == JoinType::SlidingWindowJoin) {
+//       currentJoin = std::make_shared<SlidingWindowJoin>(
+//           leftChild,   // Left child (either stream or previous join result)
+//           rightChild,  // Right child (stream)
+//           windowSpec.length,       // Sliding Window Length
+//           windowSpec.slide,        // Sliding Window Slide
+//           TimeDomain::EVENT_TIME,  // Assuming Event Time, change as needed
+//           timestampPropagator      // Timestamp propagator
+//       );
+//     } else if (joinKey.joinType == JoinType::IntervalJoin) {
+//       currentJoin = std::make_shared<IntervalJoin>(
+//           leftChild,   // Left child (either stream or previous join result)
+//           rightChild,  // Right child (stream)
+//           windowSpec.lowerBound,  // Interval lower bound
+//           windowSpec.upperBound,  // Interval upper bound
+//           timestampPropagator     // Timestamp propagator
+//       );
+//     } else {
+//       throw std::runtime_error("Unknown JoinType");
+//     }
+//   }
+
+// Return the final JoinPlan built from the permutation
+// return std::make_shared<JoinPlan>(currentJoin);
+// }
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   // Setup: Get WindowSpecs, Assignments, Propagators and TimeDomain

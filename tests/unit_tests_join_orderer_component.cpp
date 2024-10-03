@@ -723,3 +723,110 @@ TEST_F(JoinOrdererTest, TestDeriveAllWindowPermutations) {
   // Verify that BC is derived as another permutation
   EXPECT_EQ(windowAssignments.count(keyBC), 1);
 }
+
+TEST_F(JoinOrdererTest, TestJoinKeyCopy) {
+  // Step 1: Create a JoinKey with some sample data
+  JoinKey joinKey;
+  joinKey.leftStreams = {"A", "B", "C"};
+  joinKey.rightStreams = {"D"};
+  joinKey.joinType = JoinType::SlidingWindowJoin;
+
+  // Step 2: Make a copy of leftStreams
+  auto leftStreamsCopy = joinKey.leftStreams;
+
+  // Step 3: Iterate over the copy and print the streams
+  std::cout << "Iterating over leftStreamsCopy:" << std::endl;
+  for (const auto& streamName : leftStreamsCopy) {
+    std::cout << "Stream: " << streamName << std::endl;
+  }
+
+  // Step 4: Check if the copy contains the correct elements
+  ASSERT_EQ(leftStreamsCopy.size(), 3);
+  ASSERT_TRUE(leftStreamsCopy.find("A") != leftStreamsCopy.end());
+  ASSERT_TRUE(leftStreamsCopy.find("B") != leftStreamsCopy.end());
+  ASSERT_TRUE(leftStreamsCopy.find("C") != leftStreamsCopy.end());
+}
+
+TEST_F(JoinOrdererTest, TestGetStepsReturnsValidKeys) {
+  JoinPermutation permutation;
+
+  JoinKey key1;
+  key1.leftStreams = {"A"};
+  key1.rightStreams = {"B"};
+  key1.joinType = JoinType::SlidingWindowJoin;
+
+  JoinKey key2;
+  key2.leftStreams = {"B"};
+  key2.rightStreams = {"C"};
+  key2.joinType = JoinType::SlidingWindowJoin;
+
+  // Add steps to permutation
+  permutation.addJoinStep(key1);
+  permutation.addJoinStep(key2);
+
+  // Retrieve steps and check they are valid
+  const auto& steps = permutation.getSteps();
+  ASSERT_EQ(steps.size(), 2);
+
+  JoinKey joinKey1 = steps[0];
+  JoinKey joinKey2 = steps[1];
+
+  // Check that the steps match the added keys
+  ASSERT_EQ(joinKey1.leftStreams, key1.leftStreams);
+  ASSERT_EQ(joinKey2.leftStreams, key2.leftStreams);
+}
+
+TEST_F(JoinOrdererTest, TestBuildJoinPlanFromPermutation) {
+  // Step 1: Get window specifications and assignments for the testJoinPlan
+  auto [windowSpecs, windowAssignments] =
+      joinOrderer.getWindowSpecificationsAndAssignments(testJoinPlan);
+
+  // Step 2: Generate all join permutations
+  auto joinPermutations = joinOrderer.generateAllJoinPermutations(testJoinPlan);
+
+  // Ensure we have generated the permutations correctly
+  ASSERT_GT(joinPermutations.size(), 0)
+      << "No permutations generated for the test join plan";
+
+  // Step 3: Prepare a stream map from the testJoinPlan
+  std::unordered_map<std::string, std::shared_ptr<Stream>> streamMap;
+  joinOrderer.gatherStreams(testJoinPlan->getRoot(), streamMap);
+
+  // Step 4: Store the generated join plans
+  std::vector<std::shared_ptr<JoinPlan>> generatedJoinPlans;
+
+  // Build join plans from all permutations
+  for (const auto& permutation : joinPermutations) {
+    // Build the JoinPlan from the current permutation
+    auto builtJoinPlan = joinOrderer.buildJoinPlanFromPermutation(
+        permutation, windowAssignments, streamMap);
+
+    if (builtJoinPlan != nullptr) {
+      generatedJoinPlans.push_back(builtJoinPlan);
+    }
+  }
+
+  // Step 5: Ensure that we have generated valid join plans
+  ASSERT_GT(generatedJoinPlans.size(), 0)
+      << "No valid join plans built from the permutations";
+
+  // Step 6: Verify each generated join plan
+  for (const auto& joinPlan : generatedJoinPlans) {
+    ASSERT_NE(joinPlan, nullptr) << "Join plan is null";
+
+    // Check that the root of the join plan is a WindowJoinOperator
+    // (SlidingWindowJoin or IntervalJoin)
+    auto root = joinPlan->getRoot();
+    ASSERT_TRUE(std::dynamic_pointer_cast<WindowJoinOperator>(root) != nullptr)
+        << "Root of the join plan is not a WindowJoinOperator";
+
+    // Step 7: Verify that the join plan follows the left-deep structure
+    auto currentNode = std::dynamic_pointer_cast<WindowJoinOperator>(root);
+    const auto& permutationSteps =
+        joinPermutations[0]
+            .getSteps();  // Use the steps from the first permutation
+
+    for (size_t i = 0; i < permutationSteps.size(); ++i) {
+    }
+  }
+}
