@@ -325,30 +325,6 @@ void JoinOrderer::deriveAllWindowPermutations(
           }
         }
       }
-
-      // for (auto& decomposedPair : decomposedPairs) {
-      //   // For each decomposedPair (joinPair) get the appropriate Window
-      //   // Specification
-      //   auto windowSpecs = windowAssignments.at(joinKey);
-      //   assert(windowSpecs.size() == 1);
-
-      //   auto timePropagator = windowSpecs.front().timestampPropagator;
-
-      //   // Check the left stream's name in the decomposed pair
-      //   const auto& leftStreamNames = decomposedPair.leftStreams;
-
-      //   if (leftStreamNames.find(timePropagator) != leftStreamNames.end())
-      //   {
-      //     windowAssignments[decomposedPair].push_back(windowSpecs.front());
-      //   } else {
-      //     // Add other window specs (necessary for A4 case)
-      //     for (const auto& [key, ws] : windowAssignments) {
-      //       for (const auto& spec : ws) {
-      //         windowAssignments[decomposedPair].push_back(spec);
-      //       }
-      //     }
-      //   }
-      // }
     }
   }
   createCommutativePairs(windowAssignments);
@@ -603,11 +579,6 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       return generateCommutativeJoinPlans(joinPlan);  // AB:C, BA:C ...
       // return windowAssignments;
     }
-
-    // if s >= l
-    //  checkAndApplyLWO // A2, A4
-    // else
-    //  return commutativePairs(joinPlan) // A1, A3
   } else {
     // TimeDomain::EVENT_TIME
 

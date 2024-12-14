@@ -396,14 +396,65 @@ TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A3_PT) {
 }
 
 // Sliding Window Join with unequal windows and slide >= length (all incl. PT)
-// TODO: Impl Logic, Write Test
+// TODO: Impl Logic, Write Test -- P1
 TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A4_PT) {
   ASSERT_GT(1, 0);
   // TODO
 }
 
-// TODO: Impl Logic, Write Test
+// TODO: Impl Logic, Write Test -- P0
+// Should only work if one Window is completely enclosed by the other.
+// slide >= length && W1 != W2
 TEST(JoinReorderingTest, ReorderingValidation_SlidingWJ_Case_A4_ET) {
-  ASSERT_GT(1, 0);
-  // TODO
+  // Step 1: Create Streams A, B, C with sample data
+  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+  auto C = createStream("C", 5, linearValueDistribution, 100, 3);
+
+  // Step 2: Define Window Settings for Case A3 (different window lengths)
+  long lengthW1 = 10;  // window length for w1 (shorter window)
+  long lengthW2 = 20;  // window length for w2 (longer window)
+  long slide = 25;     // slide (same for both windows, just for example)
+
+  // Step 3: Create Initial JoinPlan for ABC with different windows
+  // First join (A:B) has a smaller window w1, second join ((A:B):C) has w2
+  auto joinAB = std::make_shared<SlidingWindowJoin>(
+      A, B, lengthW1, slide, TimeDomain::EVENT_TIME, "A");
+  auto joinABC = std::make_shared<SlidingWindowJoin>(
+      joinAB, C, lengthW2, slide, TimeDomain::EVENT_TIME, "A");
+  auto initialPlanABC = std::make_shared<JoinPlan>(joinABC);
+
+  // Step 4: Instantiate JoinOrderer and get reordered plans
+  JoinOrderer orderer;
+  std::vector<std::shared_ptr<JoinPlan>> reorderedPlans =
+      orderer.reorder(initialPlanABC);
+
+  // Ensure that multiple reordered plans are generated (commutative pairs)
+  ASSERT_GT(reorderedPlans.size(), 0)
+      << "No reordering plans generated for Case A4 with ET.";
+
+  // Step 5: Compute Reference Result from Initial JoinPlan ABC
+  ResultEvaluator evaluator;
+  auto referenceResultStream = executeJoin(initialPlanABC);
+  long referenceSum = evaluator.computeSum(referenceResultStream);
+
+  // Step 6: Validate each reordered Join Plan
+  for (const auto& reorderedPlan : reorderedPlans) {
+    // Execute the reordered join plan
+    auto resultStream = executeJoin(reorderedPlan);
+
+    // Compute the sum of tuples for the reordered plan
+    long resultSum = evaluator.computeSum(resultStream);
+
+    // Step 7: Compare the sum with the reference sum
+    ASSERT_EQ(resultSum, referenceSum)
+        << "Reordered join plan does not match the reference sum.";
+
+    // Step 8: Optionally, compare the actual tuples for exact match
+    std::stringstream errorStream;
+    bool resultsEqual = evaluator.compareResults(referenceResultStream,
+                                                 resultStream, errorStream);
+    ASSERT_TRUE(resultsEqual)
+        << "Reordered join plan results differ: " << errorStream.str();
+  }
 }
