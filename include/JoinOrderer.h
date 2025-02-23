@@ -68,6 +68,10 @@ class JoinOrderer {
 
   std::vector<std::shared_ptr<JoinPlan>> generateCommutativeJoinPlans(
       const std::shared_ptr<JoinPlan>& joinPlan);
+
+  double estimateCost(const std::shared_ptr<JoinPlan>& plan);
+  double estimateSWJCost(const std::shared_ptr<JoinPlan>& plan);
+  double estimateIVJCost(const std::shared_ptr<JoinPlan>& plan);
 };
 
 #endif  // JOIN_ORDERER_H

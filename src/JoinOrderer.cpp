@@ -545,6 +545,28 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
   return std::make_shared<JoinPlan>(currentJoin);
 }
 
+double JoinOrderer::estimateCost(const std::shared_ptr<JoinPlan>& plan) {
+  if (!plan)
+    return std::numeric_limits<double>::max();  // Invalid plans get max cost
+
+  switch (plan->getJoinType()) {
+    case JoinType::SlidingWindowJoin:
+      return estimateSWJCost(plan);
+    case JoinType::IntervalJoin:
+      return estimateIVJCost(plan);
+    default:
+      return std::numeric_limits<double>::max();  // Handle unexpected types
+  }
+}
+
+double JoinOrderer::estimateSWJCost(const std::shared_ptr<JoinPlan>& plan) {
+  return 0.0;
+}
+
+double JoinOrderer::estimateIVJCost(const std::shared_ptr<JoinPlan>& plan) {
+  return 0.0;
+}
+
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     const std::shared_ptr<JoinPlan>& joinPlan) {
   // Setup: Get WindowSpecs, Assignments, Propagators and TimeDomain
@@ -597,6 +619,25 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     std::shared_ptr<JoinPlan> newPlan =
         buildJoinPlanFromPermutation(perm, windowAssignments, streamMap);
     if (newPlan) {  // might be nullptr!
+
+      // TODO: before pushing a plan to validJoinPlans, estimate the cost and
+      // check if we have no better plan that is semantically equivalent
+      // already. We call estimate cost that requires knowledge about time
+      // granularity (here we use seconds always, so we can hardcode it.)
+      // Alongside window specifications i.e, slide, length (for SWJ) and bounds
+      // (for IVJ). Moreover, we need the arrival (?) rates for all Streams that
+      // we are joining according to the plan.
+
+      // 1. Determine cost
+      auto cost = estimateCost(newPlan);
+
+      // 2. Track costs for similar plans
+
+      // 3. Prune logic
+
+      // getJoinType() => SWJ or IVJ
+      //
+
       validJoinPlans.push_back(newPlan);
     }
   }
