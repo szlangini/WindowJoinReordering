@@ -4,7 +4,8 @@
 
 #include <iostream>
 
-Stream::Stream(const std::string& name, bool isBaseStream) : Node(name) {
+Stream::Stream(const std::string& name, bool isBaseStream, long rate)
+    : Node(name), rate(rate) {
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
@@ -38,6 +39,8 @@ long Stream::getMaxTimestamp() const {
   if (tuples.empty()) return 0;
   return tuples.back().timestamp;
 }
+
+long Stream::getRate() const { return this->rate; }
 
 const std::unordered_set<std::string>& Stream::getBaseStreams() const {
   return baseStreams;

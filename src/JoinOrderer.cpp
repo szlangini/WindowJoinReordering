@@ -479,12 +479,13 @@ bool JoinOrderer::checkEqualWindows(
   return true;  // no mismatch found
 }
 
-std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
+JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
     const JoinPermutation& permutation,
     const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
                              JoinKeyHash>& windowAssignments,
     const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
   std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
+  std::vector<WindowSpecification> usedSpecs;
 
   // Iterate over the steps in the permutation
   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
@@ -496,74 +497,108 @@ std::shared_ptr<JoinPlan> JoinOrderer::buildJoinPlanFromPermutation(
       std::cerr << "Error: JoinKey not found in windowAssignments: "
                 << joinKey.toString() << std::endl;
 #endif
-      return nullptr;  // Return null if we can't find the window assignment
+      return {nullptr,
+              {}};  // Return empty result if window assignment is missing
     }
 
     // Retrieve window specifications for the current join
-    // Check if there are more than 1 windows assigned.
     const auto& windowSpecs = windowAssignments.at(joinKey);
     if (windowSpecs.size() != 1) {
-      return nullptr;  // Invalid case, we should always expect one spec per
-                       // join step
+      return {nullptr, {}};  // Invalid: expect exactly one spec per join step
     }
     const auto& windowSpec = windowSpecs.front();
-    auto timestampPropagator = windowSpec.timestampPropagator;
+    usedSpecs.push_back(windowSpec);  // Collect the used spec
 
+    auto timestampPropagator = windowSpec.timestampPropagator;
     std::shared_ptr<Node> leftChild;
     std::shared_ptr<Node> rightChild =
         streamMap.at(*joinKey.rightStreams.begin());
 
-    // If this is the first step, both left and right are streams
+    // For the first step, both children are streams
     if (i == 0) {
       leftChild = streamMap.at(*joinKey.leftStreams.begin());
     } else {
-      // For subsequent steps, reuse the previously constructed join as the
-      // left child
       leftChild = currentJoin;  // Use the accumulated join as the left child
     }
 
-    // Use the join type to create the appropriate join operator
+    // Create the appropriate join operator based on join type
     if (joinKey.joinType == JoinType::SlidingWindowJoin) {
       currentJoin = std::make_shared<SlidingWindowJoin>(
-          leftChild,   // Left child (either stream or previous join result)
-          rightChild,  // Right child (stream)
-          windowSpec.length, windowSpec.slide,
+          leftChild, rightChild, windowSpec.length, windowSpec.slide,
           timestampPropagator == "NONE" ? TimeDomain::PROCESSING_TIME
                                         : TimeDomain::EVENT_TIME,
           timestampPropagator);
     } else if (joinKey.joinType == JoinType::IntervalJoin) {
       currentJoin = std::make_shared<IntervalJoin>(
-          leftChild,   // Left child (either stream or previous join result)
-          rightChild,  // Right child (stream)
-          windowSpec.lowerBound, windowSpec.upperBound, timestampPropagator);
+          leftChild, rightChild, windowSpec.lowerBound, windowSpec.upperBound,
+          timestampPropagator);
     } else {
       throw std::runtime_error("Unknown JoinType");
     }
   }
 
-  // Return the final JoinPlan built from the last join operator
-  return std::make_shared<JoinPlan>(currentJoin);
+  // Return the final join plan along with the used window specifications.
+  return {std::make_shared<JoinPlan>(currentJoin), usedSpecs};
 }
 
-double JoinOrderer::estimateCost(const std::shared_ptr<JoinPlan>& plan) {
+double JoinOrderer::estimateCost(
+    const std::shared_ptr<JoinPlan>& plan,
+    const std::vector<WindowSpecification>& windows,
+    const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
   if (!plan)
     return std::numeric_limits<double>::max();  // Invalid plans get max cost
 
+  // Retrieve stream rates.
+  std::vector<long> streamRates;
+  for (const auto& entry : streamMap) {
+    streamRates.push_back(entry.second->getRate());
+  }
+
   switch (plan->getJoinType()) {
     case JoinType::SlidingWindowJoin:
-      return estimateSWJCost(plan);
+      return estimateSWJCost(plan, windows, streamRates);
     case JoinType::IntervalJoin:
-      return estimateIVJCost(plan);
+      return estimateIVJCost(plan, windows, streamRates);
     default:
       return std::numeric_limits<double>::max();  // Handle unexpected types
   }
 }
 
-double JoinOrderer::estimateSWJCost(const std::shared_ptr<JoinPlan>& plan) {
-  return 0.0;
+double JoinOrderer::estimateSWJCost(
+    const std::shared_ptr<JoinPlan>& plan,
+    const std::vector<WindowSpecification>& windows,
+    const std::vector<long>& streamRates) {
+  const long delta_t = 1;  // Hardcoded to 1 second
+
+  // Step 1: Compute product of stream rates
+  double streamRateProduct = 1.0;
+  for (const auto& rate : streamRates) {
+    streamRateProduct *= rate;
+  }
+
+  // Step 2: Compute product of (window length / delta_t)^2
+  double windowSizeProduct = 1.0;
+  for (const auto& window : windows) {
+    double normalizedLength = static_cast<double>(window.length) / delta_t;
+    windowSizeProduct *= (normalizedLength * normalizedLength);  // Squared
+  }
+
+  // Step 3: Compute (delta_t / window slide)
+  double slideFactor = 1.0;
+  for (const auto& window : windows) {
+    slideFactor *= (static_cast<double>(delta_t) / window.slide);
+  }
+
+  // Final cost function
+  return streamRateProduct * windowSizeProduct * slideFactor;
 }
 
-double JoinOrderer::estimateIVJCost(const std::shared_ptr<JoinPlan>& plan) {
+double JoinOrderer::estimateIVJCost(
+    const std::shared_ptr<JoinPlan>& plan,
+    const std::vector<WindowSpecification>& windows,
+    const std::vector<long>& streamRates) {
+  const long delta_t = 1;  // Hardcoded to 1 second
+
   return 0.0;
 }
 
@@ -616,8 +651,10 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       joinPlan);  // Permutation looks like AB, BC or BA, AC
 
   for (const auto& perm : joinPermutations) {
-    std::shared_ptr<JoinPlan> newPlan =
+    auto joinPlanResult =
         buildJoinPlanFromPermutation(perm, windowAssignments, streamMap);
+    auto newPlan = joinPlanResult.plan;
+    auto windows = joinPlanResult.usedWindowSpecs;
     if (newPlan) {  // might be nullptr!
 
       // TODO: before pushing a plan to validJoinPlans, estimate the cost and
@@ -629,7 +666,9 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       // we are joining according to the plan.
 
       // 1. Determine cost
-      auto cost = estimateCost(newPlan);
+      auto cost = estimateCost(newPlan, windows, streamMap);
+
+      std::cout << "Plan cost: " << cost << std::endl;
 
       // 2. Track costs for similar plans
 

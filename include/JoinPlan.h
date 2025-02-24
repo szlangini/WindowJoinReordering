@@ -6,6 +6,7 @@
 #include "SlidingWindowJoin.h"
 #include "TimeDomain.h"
 #include "WindowJoinOperator.h"
+#include "WindowSpecification.h"
 
 class JoinPlan {
  public:
@@ -27,6 +28,10 @@ class JoinPlan {
   std::string getTimestampPropagator() const;
 
   JoinType getJoinType() const;
+
+  std::vector<WindowSpecification> getWindowSpecifications(
+      const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                               JoinKeyHash>& windowAssignment) const;
 
  private:
   std::shared_ptr<Node> root;

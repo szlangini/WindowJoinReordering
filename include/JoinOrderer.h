@@ -13,6 +13,11 @@
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
+struct JoinPlanResult {
+  std::shared_ptr<JoinPlan> plan;
+  std::vector<WindowSpecification> usedWindowSpecs;
+};
+
 class JoinOrderer {
  public:
   // Reorders the join plan and returns a vector of JoinPlan (Algorithm 2)
@@ -54,7 +59,7 @@ class JoinOrderer {
   std::vector<JoinPermutation> generateAllJoinPermutations(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
-  std::shared_ptr<JoinPlan> buildJoinPlanFromPermutation(
+  JoinPlanResult buildJoinPlanFromPermutation(
       const JoinPermutation& permutation,
       const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
                                JoinKeyHash>& windowAssignments,
@@ -69,9 +74,18 @@ class JoinOrderer {
   std::vector<std::shared_ptr<JoinPlan>> generateCommutativeJoinPlans(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
-  double estimateCost(const std::shared_ptr<JoinPlan>& plan);
-  double estimateSWJCost(const std::shared_ptr<JoinPlan>& plan);
-  double estimateIVJCost(const std::shared_ptr<JoinPlan>& plan);
+  double estimateCost(
+      const std::shared_ptr<JoinPlan>& plan,
+      const std::vector<WindowSpecification>& windows,
+      const std::unordered_map<std::string, std::shared_ptr<Stream>>&
+          streamMap);
+  double estimateSWJCost(const std::shared_ptr<JoinPlan>& plan,
+                         const std::vector<WindowSpecification>& windows,
+
+                         const std::vector<long>& streamRates);
+  double estimateIVJCost(const std::shared_ptr<JoinPlan>& plan,
+                         const std::vector<WindowSpecification>& windows,
+                         const std::vector<long>& streamRates);
 };
 
 #endif  // JOIN_ORDERER_H

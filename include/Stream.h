@@ -12,7 +12,7 @@
 
 class Stream : public Node {
  public:
-  Stream(const std::string& name, bool isBaseStream = true);
+  Stream(const std::string& name, bool isBaseStream = true, long rate = 1);
 
   Stream(const std::string& name, const std::vector<Tuple>& tuples,
          bool isBaseStream = true);
@@ -26,6 +26,8 @@ class Stream : public Node {
   long getMinTimestamp() const;
   long getMaxTimestamp() const;
 
+  long getRate() const;
+
   const std::unordered_set<std::string>& getBaseStreams() const;
 
   void setBaseStreams(const std::unordered_set<std::string>& baseStreams);
@@ -37,6 +39,7 @@ class Stream : public Node {
  private:
   std::vector<Tuple> tuples;
   std::unordered_set<std::string> baseStreams;
+  long rate;
 };
 
 #endif  // STREAM_H

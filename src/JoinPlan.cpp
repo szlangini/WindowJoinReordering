@@ -7,6 +7,7 @@
 #include "IntervalJoin.h"
 #include "Node.h"
 #include "WindowJoinOperator.h"
+#include "WindowSpecification.h"
 
 JoinPlan::JoinPlan(const std::shared_ptr<Node>& rootNode) : root(rootNode) {}
 
@@ -84,4 +85,12 @@ JoinType JoinPlan::getJoinType() const {
   } else {
     throw std::runtime_error("Unknown join type in JoinPlan");
   }
+}
+
+std::vector<WindowSpecification> JoinPlan::getWindowSpecifications(
+    const std::unordered_map<JoinKey, std::vector<WindowSpecification>,
+                             JoinKeyHash>& windowAssignment) const {
+  std::vector<WindowSpecification> windows;
+
+  return windows;
 }

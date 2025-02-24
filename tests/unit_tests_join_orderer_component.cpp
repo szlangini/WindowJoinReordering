@@ -801,8 +801,8 @@ TEST_F(JoinOrdererTest, TestBuildJoinPlanFromPermutation) {
     auto builtJoinPlan = joinOrderer.buildJoinPlanFromPermutation(
         permutation, windowAssignments, streamMap);
 
-    if (builtJoinPlan != nullptr) {
-      generatedJoinPlans.push_back(builtJoinPlan);
+    if (builtJoinPlan.plan != nullptr) {
+      generatedJoinPlans.push_back(builtJoinPlan.plan);
     }
   }
 
