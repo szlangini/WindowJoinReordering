@@ -10,9 +10,9 @@
 #include "Node.h"
 #include "Tuple.h"
 
-class Stream : public Node {
+class Stream : public Node, public std::enable_shared_from_this<Stream> {
  public:
-  Stream(const std::string& name, bool isBaseStream = true, long rate = 1);
+  Stream(const std::string& name, bool isBaseStream = true, double rate = 1.0);
 
   Stream(const std::string& name, const std::vector<Tuple>& tuples,
          bool isBaseStream = true);
@@ -26,7 +26,7 @@ class Stream : public Node {
   long getMinTimestamp() const;
   long getMaxTimestamp() const;
 
-  long getRate() const;
+  double getRate() const;
 
   const std::unordered_set<std::string>& getBaseStreams() const;
 
@@ -39,7 +39,7 @@ class Stream : public Node {
  private:
   std::vector<Tuple> tuples;
   std::unordered_set<std::string> baseStreams;
-  long rate;
+  double rate;
 };
 
 #endif  // STREAM_H

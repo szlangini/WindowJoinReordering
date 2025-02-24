@@ -82,10 +82,10 @@ class JoinOrderer {
   double estimateSWJCost(const std::shared_ptr<JoinPlan>& plan,
                          const std::vector<WindowSpecification>& windows,
 
-                         const std::vector<long>& streamRates);
+                         const std::vector<double>& streamRates);
   double estimateIVJCost(const std::shared_ptr<JoinPlan>& plan,
                          const std::vector<WindowSpecification>& windows,
-                         const std::vector<long>& streamRates);
+                         const std::vector<double>& streamRates);
 };
 
 #endif  // JOIN_ORDERER_H

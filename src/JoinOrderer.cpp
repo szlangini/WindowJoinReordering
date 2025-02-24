@@ -20,7 +20,7 @@
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 
 std::string demangle(const char* mangledName) {
   int status = -1;
@@ -549,8 +549,9 @@ double JoinOrderer::estimateCost(
     return std::numeric_limits<double>::max();  // Invalid plans get max cost
 
   // Retrieve stream rates.
-  std::vector<long> streamRates;
+  std::vector<double> streamRates;
   for (const auto& entry : streamMap) {
+    std::cout << entry.first << ", " << entry.second->getRate() << std::endl;
     streamRates.push_back(entry.second->getRate());
   }
 
@@ -567,7 +568,7 @@ double JoinOrderer::estimateCost(
 double JoinOrderer::estimateSWJCost(
     const std::shared_ptr<JoinPlan>& plan,
     const std::vector<WindowSpecification>& windows,
-    const std::vector<long>& streamRates) {
+    const std::vector<double>& streamRates) {
   const long delta_t = 1;  // Hardcoded to 1 second
 
   // Step 1: Compute product of stream rates
@@ -589,6 +590,12 @@ double JoinOrderer::estimateSWJCost(
     slideFactor *= (static_cast<double>(delta_t) / window.slide);
   }
 
+#if DEBUG_MODE
+  std::cout << "StreamRateProduct: " << streamRateProduct << std::endl;
+  std::cout << "WindowSizeProduct: " << windowSizeProduct << std::endl;
+  std::cout << "SlideFactor: " << slideFactor << std::endl;
+#endif
+
   // Final cost function
   return streamRateProduct * windowSizeProduct * slideFactor;
 }
@@ -596,7 +603,7 @@ double JoinOrderer::estimateSWJCost(
 double JoinOrderer::estimateIVJCost(
     const std::shared_ptr<JoinPlan>& plan,
     const std::vector<WindowSpecification>& windows,
-    const std::vector<long>& streamRates) {
+    const std::vector<double>& streamRates) {
   const long delta_t = 1;  // Hardcoded to 1 second
 
   return 0.0;

@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(googletest)
 
 # List of test sources
 set(TEST_SOURCES
+    test_cost_based_optimization.cpp
     test_swj.cpp
     test_swj_reordering.cpp
     test_ivj.cpp

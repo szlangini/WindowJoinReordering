@@ -4,17 +4,20 @@
 
 #include <iostream>
 
-Stream::Stream(const std::string& name, bool isBaseStream, long rate)
+Stream::Stream(const std::string& name, bool isBaseStream, double rate)
     : Node(name), rate(rate) {
+  std::cout << "hyello";
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
   }
+  std::cout << "constructing" << name << ", " << this->getRate() << std::endl;
 }
 
 Stream::Stream(const std::string& name, const std::vector<Tuple>& tuples,
                bool isBaseStream)
     : Node(name), tuples(tuples) {
+  std::cout << "is this called?";
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
@@ -40,7 +43,7 @@ long Stream::getMaxTimestamp() const {
   return tuples.back().timestamp;
 }
 
-long Stream::getRate() const { return this->rate; }
+double Stream::getRate() const { return this->rate; }
 
 const std::unordered_set<std::string>& Stream::getBaseStreams() const {
   return baseStreams;
@@ -51,10 +54,7 @@ void Stream::setBaseStreams(
   this->baseStreams = baseStreams;
 }
 
-std::shared_ptr<Stream> Stream::getOutputStream() {
-  // Stream simply returns itself as the output
-  return std::make_shared<Stream>(*this);
-}
+std::shared_ptr<Stream> Stream::getOutputStream() { return shared_from_this(); }
 
 void Stream::printTuples() const {
   if (tuples.empty()) {
