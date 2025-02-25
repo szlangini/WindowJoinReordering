@@ -22,6 +22,7 @@ We can compute joins for automatic stream generators and validate against other 
   - **SlidingWindowJoin Tests**: Verifies the join results and reordering in both event and processing time.
   - **IntervalJoin Tests**: Ensures correctness of interval-based joins with different bounds.
   - **Reordering Tests**: Validates the correctness of reordering the join plans and comparing the output sums across different permutations.
+  - **Cost-based Optimization Tests**: Evaluate the cost estimation for SlidingWindowJoin and IntervalJoin operators, ensuring that the implemented cost models (based on stream rates, window lengths, slides, and bounds) produce the expected values.
   
   The tests are implemented using **GoogleTest** and can be run to verify functionality.
 
