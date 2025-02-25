@@ -12,8 +12,6 @@ std::shared_ptr<Stream> createStream(
   // Derive the rate: tuples per second.
   double rate = static_cast<double>(numTuples) / maxTimestamp;
 
-  std::cout << "Rate for Stream" << name << ", rate: " << rate;
-
   auto stream = std::make_shared<Stream>(name, true, rate);
 
   // Generate timestamps evenly spaced between 0 and maxTimestamp

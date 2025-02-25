@@ -676,27 +676,8 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
     auto newPlan = joinPlanResult.plan;
     auto windows = joinPlanResult.usedWindowSpecs;
     if (newPlan) {  // might be nullptr!
-
-      // TODO: before pushing a plan to validJoinPlans, estimate the cost and
-      // check if we have no better plan that is semantically equivalent
-      // already. We call estimate cost that requires knowledge about time
-      // granularity (here we use seconds always, so we can hardcode it.)
-      // Alongside window specifications i.e, slide, length (for SWJ) and bounds
-      // (for IVJ). Moreover, we need the arrival (?) rates for all Streams that
-      // we are joining according to the plan.
-
-      // 1. Determine cost
       auto cost = estimateCost(newPlan, windows, streamMap);
-
-      std::cout << "Plan cost: " << cost << std::endl;
-
-      // 2. Track costs for similar plans
-
-      // 3. Prune logic
-
-      // getJoinType() => SWJ or IVJ
-      //
-
+      newPlan->setCost(cost);
       validJoinPlans.push_back(newPlan);
     }
   }

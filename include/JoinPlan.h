@@ -21,6 +21,9 @@ class JoinPlan {
 
   std::shared_ptr<Node> getRoot() const { return root; }
 
+  double getCost() const { return cost; }
+  void setCost(double cost) { this->cost = cost; }
+
   std::string toString() const;
 
   TimeDomain getTimeDomain() const;
@@ -35,6 +38,7 @@ class JoinPlan {
 
  private:
   std::shared_ptr<Node> root;
+  double cost = std::numeric_limits<double>::max();
 };
 
 #endif  // JOIN_PLAN_H
