@@ -6,18 +6,15 @@
 
 Stream::Stream(const std::string& name, bool isBaseStream, double rate)
     : Node(name), rate(rate) {
-  std::cout << "hyello";
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name
   }
-  std::cout << "constructing" << name << ", " << this->getRate() << std::endl;
 }
 
 Stream::Stream(const std::string& name, const std::vector<Tuple>& tuples,
                bool isBaseStream)
     : Node(name), tuples(tuples) {
-  std::cout << "is this called?";
   if (isBaseStream) {
     baseStreams.insert(
         name);  // Base streams initially contain the stream's own name

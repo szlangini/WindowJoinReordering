@@ -20,7 +20,7 @@
 #include "WindowJoinOperator.h"
 #include "WindowSpecification.h"
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 std::string demangle(const char* mangledName) {
   int status = -1;
@@ -551,7 +551,6 @@ double JoinOrderer::estimateCost(
   // Retrieve stream rates.
   std::vector<double> streamRates;
   for (const auto& entry : streamMap) {
-    std::cout << entry.first << ", " << entry.second->getRate() << std::endl;
     streamRates.push_back(entry.second->getRate());
   }
 
@@ -606,7 +605,21 @@ double JoinOrderer::estimateIVJCost(
     const std::vector<double>& streamRates) {
   const long delta_t = 1;  // Hardcoded to 1 second
 
-  return 0.0;
+  // Compute product of all stream rates.
+  double streamRateProduct = 1.0;
+  for (const auto& rate : streamRates) {
+    streamRateProduct *= rate;
+  }
+
+  // For each interval join, multiply by ((lowerBound + upperBound) / delta_t)
+  double boundsProduct = 1.0;
+  for (const auto& window : windows) {
+    double sumBounds =
+        static_cast<double>(window.lowerBound + window.upperBound);
+    boundsProduct *= (sumBounds / delta_t);
+  }
+
+  return streamRateProduct * boundsProduct;
 }
 
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
