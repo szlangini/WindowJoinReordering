@@ -56,22 +56,22 @@ TEST(CostEstimationTest, IntervalWindowJoinCost) {
 TEST(CostEstimationTest, SWJ_Reordering_And_Costing) {
   // Step 1: Create Streams A, B, C; each stream has 5 tuples over a max
   // timestamp of 100. Thus, each stream's rate = 5/100 = 0.05.
-  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
-  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
+  auto A = createStream("A", 30, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 1000, linearValueDistribution, 100, 2);
   auto C = createStream("C", 5, linearValueDistribution, 100, 3);
 
   // Step 2: Define window settings for Case A3:
   // w1 for join A:B, w2 for join (A:B):C, with a common slide = 5.
   long lengthW1 = 10;  // w1 for A:B
-  long lengthW2 = 20;  // w2 for (A:B):C
-  long slide = 5;
+  long lengthW2 = 10;  // w2 for (A:B):C
+  long slide = 10;
 
   // Step 3: Create an initial JoinPlan for A, B, C in Event Time.
   // First join (A:B) uses window w1 and second join ((A:B):C) uses window w2.
   auto joinAB = std::make_shared<SlidingWindowJoin>(
-      A, B, lengthW1, slide, TimeDomain::EVENT_TIME, "A");
+      A, B, lengthW1, slide, TimeDomain::PROCESSING_TIME);
   auto joinABC = std::make_shared<SlidingWindowJoin>(
-      joinAB, C, lengthW2, slide, TimeDomain::EVENT_TIME, "A");
+      joinAB, C, lengthW2, slide, TimeDomain::PROCESSING_TIME);
   auto initialPlanABC = std::make_shared<JoinPlan>(joinABC);
 
   // Step 4: Instantiate JoinOrderer and get reordered plans.
@@ -81,19 +81,15 @@ TEST(CostEstimationTest, SWJ_Reordering_And_Costing) {
   ASSERT_GT(reorderedPlans.size(), 0)
       << "No reordering plans generated for 3-way SWJ in ET.";
 
-  // Step 5: Manually compute the expected best cost.
-  // Base rates: each stream's rate = 0.05, so product of base rates = 0.05^3 =
-  // 0.000125. Join Step 1 (A:B) with w1: cost factor = (length/Δt * Δt/slide) =
-  // (10/1 * 1/5) = 2. Cost for join step 1 = 0.05 * 0.05 * 2 = 0.0025 * 2 =
-  // 0.005. Join Step 2 ((A:B):C) with w2: effective rate = (A:B) join rate *
-  // rate(C) = (0.05*0.05) * 0.05 = 0.000125. Cost factor for step 2 = (20/1 *
-  // 1/5) = 4. Cost for join step 2 = 0.000125 * 4 = 0.0005. Total expected cost
-  // = 0.005 + 0.0005 = 0.0055.
-  double expectedBestCost = 0.0055;
+  // Step 5 manually compute the expectedBestCost.
+  // This should be first joining AC or CA and then with B. The windows are
+  // equal in size and length to have maximum number of different plans.
+  double expectedBestCost = 0.165;
 
   // Step 6: Evaluate each reordered plan's cost and find the minimum.
   double bestCost = std::numeric_limits<double>::max();
   for (const auto& plan : reorderedPlans) {
+    std::cout << "Plan: " << plan->toString() << std::endl;
     std::cout << "SWJ Plan cost: " << plan->getCost() << std::endl;
     bestCost = std::min(bestCost, plan->getCost());
   }

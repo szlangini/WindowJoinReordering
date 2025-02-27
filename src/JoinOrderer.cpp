@@ -189,8 +189,24 @@ JoinOrderer::getAllSlidingWindowJoinPlans(
                                                  slide, timeDomain, "NONE");
     }
 
-    // Create a new JoinPlan for the reordered join
+    // Create a new JoinPlan for the reordered join.
     auto newJoinPlan = std::make_shared<JoinPlan>(join);
+
+    // Compute the cost for this plan.
+    double totalEstimatedPlanCost = 0.0;
+    const long delta_t = 1;  // Hardcoded time granularity.
+    std::shared_ptr<Node> current = newJoinPlan->getRoot();
+    // Traverse the left-deep join chain.
+    while (auto swj = std::dynamic_pointer_cast<SlidingWindowJoin>(current)) {
+      double leftRate = swj->getLeftChild()->getEffectiveRate();
+      double rightRate = swj->getRightChild()->getEffectiveRate();
+      // costStep = leftRate * rightRate * (length/slide)
+      double costStep =
+          leftRate * rightRate * (static_cast<double>(length) / slide);
+      totalEstimatedPlanCost += costStep;
+      current = swj->getLeftChild();
+    }
+    newJoinPlan->setCost(totalEstimatedPlanCost);
 
     // Add the plan to the reorderedPlans
     reorderedPlans.push_back(newJoinPlan);
