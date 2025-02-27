@@ -34,6 +34,8 @@ class Stream : public Node, public std::enable_shared_from_this<Stream> {
 
   std::shared_ptr<Stream> getOutputStream() override;
 
+  double getEffectiveRate() const override { return getRate(); }
+
   void printTuples() const;
 
  private:

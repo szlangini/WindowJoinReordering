@@ -6,7 +6,7 @@
 
 class Stream;
 
-class  Node {
+class Node {
  public:
   explicit Node(const std::string& name) : name(name) {}
 
@@ -16,6 +16,8 @@ class  Node {
   virtual std::shared_ptr<Stream> getOutputStream() = 0;
 
   std::string getName() const { return name; }
+
+  virtual double getEffectiveRate() const = 0;
 
  protected:
   std::string name;

@@ -486,6 +486,8 @@ JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
     const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
   std::shared_ptr<WindowJoinOperator> currentJoin = nullptr;
   std::vector<WindowSpecification> usedSpecs;
+  double totalEstimatedPlanCost = 0.0;
+  const long delta_t = 1;  // Hardcoded time granularity
 
   // Iterate over the steps in the permutation
   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
@@ -497,14 +499,16 @@ JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
       std::cerr << "Error: JoinKey not found in windowAssignments: "
                 << joinKey.toString() << std::endl;
 #endif
-      return {nullptr,
-              {}};  // Return empty result if window assignment is missing
+      return {nullptr, {}, std::numeric_limits<double>::max()};
     }
 
     // Retrieve window specifications for the current join
     const auto& windowSpecs = windowAssignments.at(joinKey);
     if (windowSpecs.size() != 1) {
-      return {nullptr, {}};  // Invalid: expect exactly one spec per join step
+      return {nullptr,
+              {},
+              std::numeric_limits<double>::max()};  // Expect exactly one spec
+                                                    // per join step
     }
     const auto& windowSpec = windowSpecs.front();
     usedSpecs.push_back(windowSpec);  // Collect the used spec
@@ -521,105 +525,35 @@ JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
       leftChild = currentJoin;  // Use the accumulated join as the left child
     }
 
-    // Create the appropriate join operator based on join type
+    // Compute effective rates for left and right operands.
+    double leftRate = leftChild->getEffectiveRate();
+    double rightRate = rightChild->getEffectiveRate();
+    double costStep = 0.0;
+
+    // Create the appropriate join operator and compute cost per step.
     if (joinKey.joinType == JoinType::SlidingWindowJoin) {
+      costStep = estimateCostSWJ(windowSpec, leftRate, rightRate, delta_t);
       currentJoin = std::make_shared<SlidingWindowJoin>(
           leftChild, rightChild, windowSpec.length, windowSpec.slide,
-          timestampPropagator == "NONE" ? TimeDomain::PROCESSING_TIME
-                                        : TimeDomain::EVENT_TIME,
+          (timestampPropagator == "NONE" ? TimeDomain::PROCESSING_TIME
+                                         : TimeDomain::EVENT_TIME),
           timestampPropagator);
     } else if (joinKey.joinType == JoinType::IntervalJoin) {
+      costStep = estimateCostIVJ(windowSpec, leftRate, rightRate, delta_t);
       currentJoin = std::make_shared<IntervalJoin>(
           leftChild, rightChild, windowSpec.lowerBound, windowSpec.upperBound,
           timestampPropagator);
     } else {
       throw std::runtime_error("Unknown JoinType");
     }
+
+    totalEstimatedPlanCost += costStep;
   }
 
-  // Return the final join plan along with the used window specifications.
-  return {std::make_shared<JoinPlan>(currentJoin), usedSpecs};
-}
-
-double JoinOrderer::estimateCost(
-    const std::shared_ptr<JoinPlan>& plan,
-    const std::vector<WindowSpecification>& windows,
-    const std::unordered_map<std::string, std::shared_ptr<Stream>>& streamMap) {
-  if (!plan)
-    return std::numeric_limits<double>::max();  // Invalid plans get max cost
-
-  // Retrieve stream rates.
-  std::vector<double> streamRates;
-  for (const auto& entry : streamMap) {
-    streamRates.push_back(entry.second->getRate());
-  }
-
-  switch (plan->getJoinType()) {
-    case JoinType::SlidingWindowJoin:
-      return estimateSWJCost(plan, windows, streamRates);
-    case JoinType::IntervalJoin:
-      return estimateIVJCost(plan, windows, streamRates);
-    default:
-      return std::numeric_limits<double>::max();  // Handle unexpected types
-  }
-}
-
-double JoinOrderer::estimateSWJCost(
-    const std::shared_ptr<JoinPlan>& plan,
-    const std::vector<WindowSpecification>& windows,
-    const std::vector<double>& streamRates) {
-  const long delta_t = 1;  // Hardcoded to 1 second
-
-  // Step 1: Compute product of stream rates
-  double streamRateProduct = 1.0;
-  for (const auto& rate : streamRates) {
-    streamRateProduct *= rate;
-  }
-
-  // Step 2: Compute product of (window length / delta_t)^2
-  double windowSizeProduct = 1.0;
-  for (const auto& window : windows) {
-    double normalizedLength = static_cast<double>(window.length) / delta_t;
-    windowSizeProduct *= (normalizedLength * normalizedLength);  // Squared
-  }
-
-  // Step 3: Compute (delta_t / window slide)
-  double slideFactor = 1.0;
-  for (const auto& window : windows) {
-    slideFactor *= (static_cast<double>(delta_t) / window.slide);
-  }
-
-#if DEBUG_MODE
-  std::cout << "StreamRateProduct: " << streamRateProduct << std::endl;
-  std::cout << "WindowSizeProduct: " << windowSizeProduct << std::endl;
-  std::cout << "SlideFactor: " << slideFactor << std::endl;
-#endif
-
-  // Final cost function
-  return streamRateProduct * windowSizeProduct * slideFactor;
-}
-
-double JoinOrderer::estimateIVJCost(
-    const std::shared_ptr<JoinPlan>& plan,
-    const std::vector<WindowSpecification>& windows,
-    const std::vector<double>& streamRates) {
-  const long delta_t = 1;  // Hardcoded to 1 second
-
-  // Compute product of all stream rates.
-  double streamRateProduct = 1.0;
-  for (const auto& rate : streamRates) {
-    streamRateProduct *= rate;
-  }
-
-  // For each interval join, multiply by ((lowerBound + upperBound) / delta_t)
-  double boundsProduct = 1.0;
-  for (const auto& window : windows) {
-    double sumBounds =
-        static_cast<double>(window.lowerBound + window.upperBound);
-    boundsProduct *= (sumBounds / delta_t);
-  }
-
-  return streamRateProduct * boundsProduct;
+  // Return the final join plan along with the used window specifications and
+  // the total estimated cost.
+  return {std::make_shared<JoinPlan>(currentJoin), usedSpecs,
+          totalEstimatedPlanCost};
 }
 
 std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
@@ -671,13 +605,14 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
       joinPlan);  // Permutation looks like AB, BC or BA, AC
 
   for (const auto& perm : joinPermutations) {
-    auto joinPlanResult =
-        buildJoinPlanFromPermutation(perm, windowAssignments, streamMap);
+    auto joinPlanResult = buildJoinPlanFromPermutation(
+        perm, windowAssignments,
+        streamMap);  // Note: The cost estimation is now part of this and will
+                     // be returned in JoinPlanResult struct.
     auto newPlan = joinPlanResult.plan;
     auto windows = joinPlanResult.usedWindowSpecs;
     if (newPlan) {  // might be nullptr!
-      auto cost = estimateCost(newPlan, windows, streamMap);
-      newPlan->setCost(cost);
+      newPlan->setCost(joinPlanResult.totalEstimatedPlanCost);
       validJoinPlans.push_back(newPlan);
     }
   }

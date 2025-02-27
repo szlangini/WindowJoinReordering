@@ -128,6 +128,12 @@ class WindowJoinOperator : public Node {
   // identify join type
   virtual std::string getJoinType() const = 0;
 
+  // Rates for joins are the product of incoming rates. Since in this example we
+  // dont filter
+  double getEffectiveRate() const override {
+    return leftChild->getEffectiveRate() * rightChild->getEffectiveRate();
+  }
+
  protected:
   std::shared_ptr<Node> leftChild;
   std::shared_ptr<Node> rightChild;

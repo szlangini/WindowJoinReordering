@@ -16,6 +16,7 @@
 struct JoinPlanResult {
   std::shared_ptr<JoinPlan> plan;
   std::vector<WindowSpecification> usedWindowSpecs;
+  double totalEstimatedPlanCost;
 };
 
 class JoinOrderer {
@@ -74,18 +75,25 @@ class JoinOrderer {
   std::vector<std::shared_ptr<JoinPlan>> generateCommutativeJoinPlans(
       const std::shared_ptr<JoinPlan>& joinPlan);
 
-  double estimateCost(
-      const std::shared_ptr<JoinPlan>& plan,
-      const std::vector<WindowSpecification>& windows,
-      const std::unordered_map<std::string, std::shared_ptr<Stream>>&
-          streamMap);
-  double estimateSWJCost(const std::shared_ptr<JoinPlan>& plan,
-                         const std::vector<WindowSpecification>& windows,
+  // Helper function for Sliding Window Join cost estimation.
+  // costStep = leftRate * rightRate * (length/Δt * Δt/slide)
+  static double estimateCostSWJ(const WindowSpecification& windowSpec,
+                                double leftRate, double rightRate,
+                                long delta_t) {
+    return leftRate * rightRate *
+           (static_cast<double>(windowSpec.length) / delta_t *
+            (static_cast<double>(delta_t) / windowSpec.slide));
+  }
 
-                         const std::vector<double>& streamRates);
-  double estimateIVJCost(const std::shared_ptr<JoinPlan>& plan,
-                         const std::vector<WindowSpecification>& windows,
-                         const std::vector<double>& streamRates);
+  // Helper function for Interval Join cost estimation.
+  // costStep = leftRate * rightRate * ((lowerBound + upperBound)/Δt)
+  static double estimateCostIVJ(const WindowSpecification& windowSpec,
+                                double leftRate, double rightRate,
+                                long delta_t) {
+    return leftRate * rightRate *
+           (static_cast<double>(windowSpec.lowerBound + windowSpec.upperBound) /
+            delta_t);
+  }
 };
 
 #endif  // JOIN_ORDERER_H
