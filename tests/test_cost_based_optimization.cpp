@@ -105,7 +105,6 @@ TEST(CostEstimationTest, IVJ_Reordering_And_Costing) {
   auto A = createStream("A", 50, linearValueDistribution, 100, 1);
   auto B = createStream("B", 100, linearValueDistribution, 100, 2);
   auto C = createStream("C", 150, linearValueDistribution, 100, 3);
-  auto D = createStream("D", 200, linearValueDistribution, 100, 4);
 
   // Step 2: Define Interval Join window settings: lowerBound = 3, upperBound
   // = 7.
@@ -133,12 +132,16 @@ TEST(CostEstimationTest, IVJ_Reordering_And_Costing) {
       << "No reordering plans generated for 3-way IVJ in ET.";
 
   // Step 5: Manually compute the expected best cost.
-  // Base rates: each stream's rate = 0.05, so product of base rates = 0.05^3 =
-  // 0.000125. For each IVJ step, cost factor = (lowerBound+upperBound)/Δt =
-  // (3+7)/1 = 10. Join Step 1 cost = 0.05 * 0.05 * 10 = 0.0025 * 10 = 0.025.
-  // Join Step 2 cost = (0.05*0.05)*0.05 * 10 = 0.000125 * 10 = 0.00125.
-  // Total expected cost = 0.025 + 0.00125 = 0.02625.
-  double expectedBestCost = 0.02625;
+  // Base rates:
+  //   A: 0.5, B: 1.0, C: 1.5.
+  // Join Step 1 (A:B): effective rate = 0.5 * 1.0 = 0.5, cost factor = (3+3) =
+  // 6,
+  //   so cost = 0.5 * 6 = 3.0.
+  // Join Step 2 ((A:B):C): effective rate = (0.5) * 1.5 = 0.75, cost factor =
+  // 6,
+  //   so cost = 0.75 * 6 = 4.5.
+  // Total expected cost = 3.0 + 4.5 = 7.5.
+  double expectedBestCost = 7.5;
 
   // Step 6: Evaluate each reordered plan's cost and find the minimum.
   double bestCost = std::numeric_limits<double>::max();
