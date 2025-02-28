@@ -3,6 +3,7 @@
 // then we do reordering + costing.
 #include <gtest/gtest.h>
 
+#include <iostream>
 #include <memory>
 #include <unordered_map>
 
@@ -89,8 +90,6 @@ TEST(CostEstimationTest, SWJ_Reordering_And_Costing) {
   // Step 6: Evaluate each reordered plan's cost and find the minimum.
   double bestCost = std::numeric_limits<double>::max();
   for (const auto& plan : reorderedPlans) {
-    std::cout << "Plan: " << plan->toString() << std::endl;
-    std::cout << "SWJ Plan cost: " << plan->getCost() << std::endl;
     bestCost = std::min(bestCost, plan->getCost());
   }
 
@@ -103,14 +102,15 @@ TEST(CostEstimationTest, SWJ_Reordering_And_Costing) {
 // Test 4: Reordering and cost ranking for a 3-way IVJ.
 TEST(CostEstimationTest, IVJ_Reordering_And_Costing) {
   // Step 1: Create Streams A, B, C; each has rate = 5/100 = 0.05.
-  auto A = createStream("A", 5, linearValueDistribution, 100, 1);
-  auto B = createStream("B", 5, linearValueDistribution, 100, 2);
-  auto C = createStream("C", 5, linearValueDistribution, 100, 3);
+  auto A = createStream("A", 50, linearValueDistribution, 100, 1);
+  auto B = createStream("B", 100, linearValueDistribution, 100, 2);
+  auto C = createStream("C", 150, linearValueDistribution, 100, 3);
+  auto D = createStream("D", 200, linearValueDistribution, 100, 4);
 
   // Step 2: Define Interval Join window settings: lowerBound = 3, upperBound
   // = 7.
   long lowerBound = 3;
-  long upperBound = 7;
+  long upperBound = 3;
 
   // Step 3: Create an initial JoinPlan for A, B, C using IntervalJoin in Event
   // Time. First join (A:B) uses interval [A.ts-3, A.ts+7] and then join
@@ -119,13 +119,17 @@ TEST(CostEstimationTest, IVJ_Reordering_And_Costing) {
       std::make_shared<IntervalJoin>(A, B, lowerBound, upperBound, "A");
   auto joinABC =
       std::make_shared<IntervalJoin>(joinAB, C, lowerBound, upperBound, "A");
+
   auto initialPlanABC = std::make_shared<JoinPlan>(joinABC);
 
   // Step 4: Instantiate JoinOrderer and get reordered plans.
   JoinOrderer orderer;
   std::vector<std::shared_ptr<JoinPlan>> reorderedPlans =
       orderer.reorder(initialPlanABC);
-  ASSERT_GT(reorderedPlans.size(), 0)
+  for (auto reorderedPlan : reorderedPlans) {
+    std::cout << reorderedPlan->toString() << std::endl;
+  }
+  ASSERT_GT(reorderedPlans.size(), 2)
       << "No reordering plans generated for 3-way IVJ in ET.";
 
   // Step 5: Manually compute the expected best cost.

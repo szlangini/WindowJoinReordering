@@ -505,28 +505,42 @@ JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
   double totalEstimatedPlanCost = 0.0;
   const long delta_t = 1;  // Hardcoded time granularity
 
-  // Iterate over the steps in the permutation
+  // Iterate over the steps in the permutation.
   for (size_t i = 0; i < permutation.getSteps().size(); ++i) {
     const JoinKey& joinKey = permutation.getSteps()[i];
 
-    // Check if the current join is part of the window assignments
-    if (windowAssignments.find(joinKey) == windowAssignments.end()) {
+    // Try to find the window assignment for the current join key.
+    const std::vector<WindowSpecification>* windowSpecsPtr = nullptr;
+    auto it = windowAssignments.find(joinKey);
+    if (it != windowAssignments.end()) {
+      windowSpecsPtr = &it->second;
+    } else if (joinKey.leftStreams.size() >
+               1) {  // Only allow fallback if joinKey is already a join.
+      // Fallback: search among decomposed keys.
+      auto decomposedPairs = decomposeJoinPair(joinKey);
+      for (const auto& fallbackKey : decomposedPairs) {
+        auto itFallback = windowAssignments.find(fallbackKey);
+        if (itFallback != windowAssignments.end()) {
+          windowSpecsPtr = &itFallback->second;
+          break;
+        }
+      }
+    }
+
+    if (!windowSpecsPtr) {
 #if DEBUG_MODE
-      std::cerr << "Error: JoinKey not found in windowAssignments: "
-                << joinKey.toString() << std::endl;
+      std::cerr
+          << "Error: JoinKey not found (even fallback) in windowAssignments: "
+          << joinKey.toString() << std::endl;
 #endif
       return {nullptr, {}, std::numeric_limits<double>::max()};
     }
 
-    // Retrieve window specifications for the current join
-    const auto& windowSpecs = windowAssignments.at(joinKey);
-    if (windowSpecs.size() != 1) {
-      return {nullptr,
-              {},
-              std::numeric_limits<double>::max()};  // Expect exactly one spec
-                                                    // per join step
+    // Expect exactly one window specification per join step.
+    if (windowSpecsPtr->size() != 1) {
+      return {nullptr, {}, std::numeric_limits<double>::max()};
     }
-    const auto& windowSpec = windowSpecs.front();
+    const auto& windowSpec = windowSpecsPtr->front();
     usedSpecs.push_back(windowSpec);  // Collect the used spec
 
     auto timestampPropagator = windowSpec.timestampPropagator;
@@ -534,11 +548,11 @@ JoinPlanResult JoinOrderer::buildJoinPlanFromPermutation(
     std::shared_ptr<Node> rightChild =
         streamMap.at(*joinKey.rightStreams.begin());
 
-    // For the first step, both children are streams
+    // For the first step, both children are streams.
     if (i == 0) {
       leftChild = streamMap.at(*joinKey.leftStreams.begin());
     } else {
-      leftChild = currentJoin;  // Use the accumulated join as the left child
+      leftChild = currentJoin;  // Use the accumulated join as the left child.
     }
 
     // Compute effective rates for left and right operands.
@@ -626,7 +640,7 @@ std::vector<std::shared_ptr<JoinPlan>> JoinOrderer::reorder(
         streamMap);  // Note: The cost estimation is now part of this and will
                      // be returned in JoinPlanResult struct.
     auto newPlan = joinPlanResult.plan;
-    auto windows = joinPlanResult.usedWindowSpecs;
+    // auto windows = joinPlanResult.usedWindowSpecs;
     if (newPlan) {  // might be nullptr!
       newPlan->setCost(joinPlanResult.totalEstimatedPlanCost);
       validJoinPlans.push_back(newPlan);

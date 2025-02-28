@@ -38,7 +38,7 @@ TEST(JoinReorderingTest,
       orderer.reorder(initialPlan);
 
   // Check that reordering plans are generated
-  ASSERT_GT(reorderedPlans.size(), 0) << "No reordering plans generated.";
+  ASSERT_GT(reorderedPlans.size(), 2) << "No reordering plans generated.";
 
 #if DEBUG_MODE
   std::cout << "Found new plans - in total: "
